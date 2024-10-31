@@ -1,0 +1,404 @@
+from tkinter import *
+import sqlite3
+from tkinter import messagebox
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
+import pandas as pd
+
+
+def show_selection():
+    selection = var.get()
+    print(f"Selected option: {selection}")
+
+
+def yearly_income_report():
+    def get_yearly_income():
+        connection = sqlite3.connect('govRental.db')
+        cursor = connection.cursor()
+
+        try:
+            # Query to get total rental amount for each month
+            cursor.execute("""
+                SELECT strftime('%Y-%m', payment_date) AS year_month, 
+                       COALESCE(SUM(rental_amount), 0) as total_rental
+                FROM payments
+                WHERE payment_date IS NOT NULL
+                GROUP BY year_month
+                ORDER BY year_month
+            """)
+            data = cursor.fetchall()
+
+            df = pd.DataFrame(data, columns=['year_month', 'rental'])
+            df['rental'] = pd.to_numeric(df['rental'])
+
+            if len(data) > 0:
+                df['year_month'] = pd.to_datetime(df['year_month'], format='%Y-%m')
+                min_date = df['year_month'].min()
+                max_date = df['year_month'].max()
+                date_range = pd.date_range(start=min_date, end=max_date, freq='MS')
+
+                all_months_df = pd.DataFrame({'year_month': date_range})
+                df = pd.merge(all_months_df, df, on='year_month', how='left')
+                df['rental'] = df['rental'].fillna(0)
+
+                months = [date.strftime('%B %Y') for date in df['year_month']]
+                rental_values = df['rental'].tolist()
+            else:
+                months = []
+                rental_values = []
+
+        except Exception as e:
+            messagebox.showerror("Database Error", f"An error occurred: {e}")
+            print(e)
+            return [], []
+        finally:
+            connection.close()
+
+        return months, rental_values, df
+
+    def save_to_excel():
+        file_name = "Monthly_Rental_Report.xlsx"
+        try:
+            df.to_excel(file_name, index=False)
+            messagebox.showinfo("Excel Export", f"Data exported successfully to {file_name}")
+        except Exception as e:
+            messagebox.showerror("Excel Export Error", f"An error occurred while exporting data: {e}")
+            print(e)
+
+    def show_details():
+        details_window = Toplevel()
+        details_window.title("Rental Amount Details")
+        details_window.geometry("600x400")
+        details_window.configure(bg='linen')
+
+        details_frame = Frame(details_window, bg='linen')
+        details_frame.pack(padx=20, pady=20, fill=BOTH, expand=True)
+
+        title_label = Label(details_frame, 
+                          text=f"Monthly Rental Breakdown for {year}", 
+                          font=('Arial', 14, 'bold'), 
+                          bg='linen')
+        title_label.pack(pady=(0, 20))
+
+        headers_frame = Frame(details_frame, bg='linen')
+        headers_frame.pack(fill=X, padx=10)
+        
+        Label(headers_frame, text="Month", font=('Arial', 12, 'bold'), 
+              width=20, bg='linen').pack(side=LEFT)
+        Label(headers_frame, text="Rental Amount (RM)", font=('Arial', 12, 'bold'), 
+              width=20, bg='linen').pack(side=LEFT)
+
+        canvas = Canvas(details_frame, bg='linen')
+        scrollbar = Scrollbar(details_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = Frame(canvas, bg='linen')
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        for month, rental in zip(months, rental_values):
+            row_frame = Frame(scrollable_frame, bg='linen')
+            row_frame.pack(fill=X, padx=10, pady=2)
+            
+            Label(row_frame, text=month, font=('Arial', 11), 
+                  width=20, bg='linen').pack(side=LEFT)
+            Label(row_frame, text=f"{rental:,.2f}", font=('Arial', 11), 
+                  width=20, bg='linen').pack(side=LEFT)
+
+        canvas.pack(side="left", fill="both", expand=True, padx=10, pady=(10, 0))
+        scrollbar.pack(side="right", fill="y", pady=(10, 0))
+
+    months, rental_values, df = get_yearly_income()
+
+    if not months or not rental_values:
+        return
+
+    # Calculate total rental amount
+    total_rental = sum(rental_values)
+    year = months[0].split()[-1] if months else ""
+
+    fig = plt.Figure(figsize=(12, 6))
+    fig.patch.set_facecolor('none')
+    canvas = FigureCanvasTkAgg(fig, master=chart_frame)
+    canvas_widget = canvas.get_tk_widget()
+
+    chart_frame_width = 1500
+    chart_frame_height = 800
+    canvas_width = 12 * 100
+    canvas_height = 6 * 100
+
+    x_position = (chart_frame_width - canvas_width) // 2
+    y_position = (chart_frame_height - canvas_height) // 2
+
+    canvas_widget.place(x=x_position, y=y_position)
+
+    total_label = Label(
+        chart_frame,
+        text=f"Total Rental Amount for Year {year}: RM {total_rental:,.2f}",
+        font=('Arial', 12, 'bold'),
+        bg='linen',
+        fg='#002400'
+    )
+    total_label.place(
+        x=chart_frame_width // 2,
+        y=y_position + canvas_height + 35,
+        anchor='center'
+    )
+
+    # Add the Details button styled as a hyperlink
+    details_button = Label(
+        chart_frame,
+        text="Details",
+        font=('Arial', 10, 'underline'),
+        bg='linen',
+        fg='blue',
+        cursor='hand2'  # Changes cursor to hand when hovering
+    )
+    details_button.place(
+        x=chart_frame_width // 2,
+        y=y_position + canvas_height + 65,  # 30 pixels below total_label
+        anchor='center'
+    )
+    details_button.bind('<Button-1>', lambda e: show_details())  # Bind click event
+    details_button.bind('<Enter>', lambda e: details_button.configure(fg='purple'))  # Change color on hover
+    details_button.bind('<Leave>', lambda e: details_button.configure(fg='blue'))  # Change back when mouse leaves
+
+    fig.clear()
+    ax = fig.add_subplot(111)
+    ax.set_facecolor('none')
+
+    bars = ax.bar(months, rental_values, color='#002400', alpha=0.7)
+    ax.set_title("Yearly Rental Amount", pad=20, fontsize=20, fontweight='bold', color='black')
+    ax.set_xlabel("Month", labelpad=10, fontsize=12, color='black')
+    ax.set_ylabel("Rental Amount (RM)", labelpad=10, fontsize=12, color='black')
+    ax.tick_params(colors='black')
+    ax.set_xticks(range(len(months)))
+    ax.set_xticklabels(months, rotation=45, ha='right', fontsize=9, color='black')
+    ax.grid(True, axis='y', linestyle='--', alpha=0.3, color='black')
+
+    fig.subplots_adjust(left=0.1, right=0.95, bottom=0.2, top=0.9)
+    canvas_widget.configure(bg='linen')
+    canvas.draw()
+
+    # Add the "Excel File" button to export the data
+    excel_button = Button(
+        chart_frame, 
+        text="Export Rental Report", 
+        font=('Arial', 12, 'bold'), 
+        bg='green', 
+        fg='white',
+        command=save_to_excel
+    )
+    excel_button.place(x=10, y=chart_frame_height - 50)  # Position at bottom-left
+
+
+def get_overdue_payments():
+    connection = sqlite3.connect('govRental.db')
+    cursor = connection.cursor()
+
+    try:
+        # Modified query to include month grouping and sort by month in descending order
+        cursor.execute("""
+            SELECT 
+                payment_id,
+                tenant_ID,
+                tenant_username,
+                strftime('%d-%m-%Y', payment_date) as formatted_date,
+                strftime('%m-%Y', payment_date) as month_year,
+                rental_amount,
+                CAST(strftime('%d', payment_date) AS INTEGER) as day_of_month
+            FROM payments
+            WHERE CAST(strftime('%d', payment_date) AS INTEGER) > 7
+            ORDER BY payment_date DESC
+        """)
+        data = cursor.fetchall()
+
+        # Convert to DataFrame with new columns
+        df = pd.DataFrame(data, columns=['Payment ID', 'Tenant ID', 'Tenant Username', 
+                                       'Payment Date', 'Month Year', 'Rental Amount', 'Day'])
+        
+        # Format the rental amount
+        df['Rental Amount'] = df['Rental Amount'].apply(lambda x: f"RM {x:,.2f}")
+        
+        # Drop the Day column
+        df = df.drop('Day', axis=1)
+        
+        # Sort Month Year in descending order and then group
+        df['Sort Key'] = pd.to_datetime(df['Month Year'], format='%m-%Y')
+        df = df.sort_values('Sort Key', ascending=False)
+        df = df.drop('Sort Key', axis=1)
+        
+        # Group by Month Year
+        grouped_df = df.groupby('Month Year', sort=False)
+        
+        return grouped_df
+
+    except Exception as e:
+        messagebox.showerror("Database Error", f"An error occurred: {e}")
+        print(e)
+        return None
+    finally:
+        connection.close()
+
+
+def overdue_payments_report():
+    # Get the grouped overdue payments data
+    grouped_df = get_overdue_payments()
+
+    if grouped_df is None or len(grouped_df) == 0:
+        message_label = Label(
+            chart_frame,
+            text="No overdue payments found.",
+            font=('Arial', 14, 'bold'),
+            bg='linen',
+            fg='black'
+        )
+        message_label.place(relx=0.5, rely=0.4, anchor='center')
+        return
+
+    # Create main title
+    title_label = Label(
+        chart_frame,
+        text="Overdue Payments Report",
+        font=('Arial', 20, 'bold'),
+        bg='linen',
+        fg='black'
+    )
+    title_label.place(relx=0.5, y=50, anchor='center')
+
+    # Create main frame for all tables
+    main_frame = Frame(chart_frame, bg='linen')
+    main_frame.place(relx=0.5, y=120, anchor='n', width=1000, height=500)
+
+    # Create canvas and scrollbar for main frame
+    main_canvas = Canvas(main_frame, bg='linen')
+    main_scrollbar = Scrollbar(main_frame, orient="vertical", command=main_canvas.yview)
+    scrollable_main_frame = Frame(main_canvas, bg='linen')
+
+    scrollable_main_frame.bind(
+        "<Configure>",
+        lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+    )
+
+    main_canvas.create_window((0, 0), window=scrollable_main_frame, anchor="nw")
+    main_canvas.configure(yscrollcommand=main_scrollbar.set)
+
+    # Column widths
+    widths = [12, 12, 20, 15, 15]  # Adjusted widths for each column
+    headers = ['Payment ID', 'Tenant ID', 'Tenant Username', 'Payment Date', 'Rental Amount']
+
+    # Create tables for each month
+    total_overdue = 0
+    for month_year, group in grouped_df:
+        # Month header
+        month_label = Label(
+            scrollable_main_frame,
+            text=f"Month: {month_year}",
+            font=('Arial', 12, 'bold'),
+            bg='linen',
+            fg='#002400'
+        )
+        month_label.pack(pady=(20, 10))
+
+        # Create frame for this month's table
+        table_frame = Frame(scrollable_main_frame, bg='linen')
+        table_frame.pack(fill=X, padx=10)
+
+        # Create headers
+        for col, (header, width) in enumerate(zip(headers, widths)):
+            Label(
+                table_frame,
+                text=header,
+                font=('Arial', 11, 'bold'),
+                bg='linen',
+                width=width
+            ).grid(row=0, column=col, padx=5, pady=5)
+
+        # Add data rows
+        for row_idx, (_, row) in enumerate(group.iterrows(), 1):
+            for col_idx, (value, width) in enumerate(zip(row[headers], widths)):
+                Label(
+                    table_frame,
+                    text=str(value),
+                    font=('Arial', 10),
+                    bg='linen',
+                    width=width
+                ).grid(row=row_idx, column=col_idx, padx=5, pady=2)
+
+        # Add separator
+        separator = Frame(scrollable_main_frame, height=2, bg='grey')
+        separator.pack(fill=X, padx=20, pady=10)
+
+        total_overdue += len(group)
+
+    main_canvas.pack(side="left", fill="both", expand=True, padx=10)
+    main_scrollbar.pack(side="right", fill="y")
+
+    # Add total count label
+    total_label = Label(
+        chart_frame,
+        text=f"Total Overdue Payments: {total_overdue}",
+        font=('Arial', 12, 'bold'),
+        bg='linen',
+        fg='black'
+    )
+    total_label.place(relx=0.5, y=650, anchor='center')
+
+
+def generate_report():
+    selection = var.get()
+
+    for widget in chart_frame.winfo_children():
+        widget.destroy()
+
+    if selection == "Attendance":
+        report_label = Label(chart_frame, 
+                           text="Attendance Report", 
+                           font=('Arial', 20, 'bold'), 
+                           bg='linen',
+                           fg='#fd5602')
+        report_label.place(relx=0.5, rely=0.5, anchor='center')
+
+    elif selection == "Yearly Income":
+        yearly_income_report()
+
+    elif selection == "Overdue Payments":
+        overdue_payments_report()
+
+
+root = Tk()
+root.title("Analytics & Reports")
+root.geometry("1920x1080")
+
+radio_button_frame = Frame(root, width=350, height=1080)
+radio_button_frame.place(x=0, y=0)
+
+chart_frame = Frame(root, width=1500, height=800, bg='linen')
+chart_frame.place(x=350, y=100)
+
+var = StringVar(value="Attendance")
+report_label = Label(chart_frame, text="Please select and click on generate to view analytic and report.", bg='linen',
+                     fg='black', font=('Arial', 20, 'bold'))
+report_label.place(relx=0.5, rely=0.5, anchor='center')
+
+radio_button_font = ('Arial', 15, 'bold')
+radio_attendance = Radiobutton(radio_button_frame, text="Attendance", variable=var, value="Attendance",
+                               font=radio_button_font, command=show_selection)
+radio_yearly_income = Radiobutton(radio_button_frame, text="Yearly Income", variable=var, value="Yearly Income",
+                                  font=radio_button_font, command=show_selection)
+radio_overdue_payments = Radiobutton(radio_button_frame, text="Overdue Payments", variable=var,
+                                     value="Overdue Payments", font=radio_button_font, command=show_selection)
+
+generate_button = Button(radio_button_frame, text="Generate", font=radio_button_font, fg="#BBCF8D", bg="#002400",
+                         activebackground="white", width=18, command=generate_report)
+generate_button.place(x=50, y=300)
+
+radio_attendance.place(x=50, y=100)
+radio_yearly_income.place(x=50, y=150)
+radio_overdue_payments.place(x=50, y=200)
+
+root.mainloop()
