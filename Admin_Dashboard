@@ -1,0 +1,2469 @@
+from tkinter import *
+import tkintermapview
+from PIL import Image, ImageTk
+import sqlite3
+from geopy.geocoders import Nominatim
+from tkinter import messagebox
+from tkinter import ttk
+import json
+import datetime
+from tkcalendar import Calendar
+from datetime import datetime, timedelta
+from tkcalendar import DateEntry
+from tkinter import font
+import pandas as pd
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
+
+# fg='#fedebe' , bg='#fd5602'
+
+# Initialize the Tkinter root
+root = Tk()
+root.geometry("1920x1080")
+
+# Connect to the SQLite database (create it if it doesn't exist)
+conn = sqlite3.connect("govRental.db")
+cursor = conn.cursor()
+
+'''
+def admin_login_register():
+    global login_frame, register_frame
+    # Connect to the SQLite database
+    def connect_db():
+        conn = sqlite3.connect('govRental.db')
+        return conn
+
+    # Function to register admin
+    def register_admin():
+        # Retrieve user inputs and strip whitespace
+        admin_name = name_entry.get().strip()
+        admin_ic = ic_entry.get().strip()
+        admin_gender = gender_entry.get().strip()
+        admin_phone = phone_entry.get().strip()
+        admin_passcode = passcode_entry.get().strip()
+        admin_email = email_entry.get().strip()
+
+        # Validate all fields are filled
+        if not all([admin_name, admin_ic, admin_gender, admin_phone, admin_passcode, admin_email]):
+            messagebox.showerror("Error", "Please fill in all fields.")
+            return
+
+        # Additional input validation
+        try:
+            # Validate IC Number
+            if not (admin_ic.isdigit() and len(admin_ic) == 12):
+                messagebox.showerror("Error", "IC Number must be exactly 12 digits.")
+                return
+
+            # Validate Phone Number
+            if not (admin_phone.isdigit() and 10 <= len(admin_phone) <= 11):
+                messagebox.showerror("Error", "Phone number must be 10-11 digits.")
+                return
+
+            # Validate Passcode
+            if not (len(admin_passcode) == 6):
+                messagebox.showerror("Error", "Passcode must be exactly 6 characters.")
+                return
+
+            # Validate Gender
+            admin_gender = admin_gender.capitalize()
+            if admin_gender not in ['Male', 'Female', 'Other']:
+                messagebox.showerror("Error", "Gender must be 'Male', 'Female', or 'Other'.")
+                return
+
+            # Validate Email (basic check)
+            if '@' not in admin_email or '.' not in admin_email:
+                messagebox.showerror("Error", "Please enter a valid email address.")
+                return
+
+            # Database operations
+            conn = connect_db()
+            cursor = conn.cursor()
+
+            # Check if IC or Email already exists
+            cursor.execute(
+                "SELECT Admin_IC_Number, Admin_Email_Address FROM Admin WHERE Admin_IC_Number = ? OR Admin_Email_Address = ?",
+                (admin_ic, admin_email))
+            existing = cursor.fetchone()
+            if existing:
+                conn.close()
+                messagebox.showerror("Error", "An admin with this IC number or email already exists.")
+                return
+
+            # Generate Admin_ID
+            cursor.execute("SELECT Admin_ID FROM Admin ORDER BY Admin_ID DESC LIMIT 1")
+            last_admin_id = cursor.fetchone()
+            new_admin_id = f"AD{(int(last_admin_id[0][2:]) + 1 if last_admin_id else 1):03d}"
+
+            # Insert new admin
+            cursor.execute("""
+                INSERT INTO Admin (
+                    Admin_ID, Admin_Name, Admin_IC_Number, Admin_Phone_Number,
+                    Admin_Passcode, Admin_Email_Address, Admin_Gender, Admin_Join_Date, Admin_Salary
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, DATE('now'), 1500.00)
+            """, (new_admin_id, admin_name, admin_ic, admin_phone, admin_passcode,
+                  admin_email, admin_gender))
+
+            conn.commit()
+            conn.close()
+
+            messagebox.showinfo("Success", f"Admin registered successfully!\nYour Admin ID is: {new_admin_id}")
+            clear_entries()
+            show_login_frame()  # Automatically switch to login frame after successful registration
+
+        except sqlite3.IntegrityError as e:
+            conn.close()
+            messagebox.showerror("Database Error", f"Registration failed: {str(e)}")
+        except Exception as e:
+            conn.close()
+            messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
+
+    # Function to login admin
+    def login_admin():
+        admin_ic = login_ic_num_entry.get()
+        admin_passcode = login_passcode_entry.get()
+
+        if admin_ic and admin_passcode:
+            conn = connect_db()
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT * FROM Admin WHERE Admin_IC_Number = ? AND Admin_Passcode = ?",
+                           (admin_ic, admin_passcode))
+            admin = cursor.fetchone()
+
+            conn.close()
+
+            if admin:
+                messagebox.showinfo("Success", f"Welcome {admin[1]}!")
+                live_location()
+            else:
+                messagebox.showerror("Error", "Invalid IC Number or passcode.")
+        else:
+            messagebox.showerror("Error", "Please fill in both IC Number and passcode.")
+
+    # Function to clear form entries after registration
+    def clear_entries():
+        name_entry.delete(0, END)
+        ic_entry.delete(0, END)
+        gender_entry.delete(0, END)
+        phone_entry.delete(0, END)
+        passcode_entry.delete(0, END)
+        email_entry.delete(0, END)
+
+    # Function to switch to the register frame
+    def show_register_frame():
+        main_frame.pack_forget()
+        head_frame.pack_forget()
+        login_frame.place_forget()  # Hide login frame
+        register_frame.place(relx=0.5, rely=0.5, anchor='center')  # Show register frame
+
+    # Function to switch to the login frame
+    def show_login_frame():
+        main_frame.pack_forget()
+        head_frame.pack_forget()
+        register_frame.place_forget()  # Hide register frame
+        login_frame.place(relx=0.5, rely=0.5, anchor='center')  # Show login frame
+
+    admin_id = None  # Global variable to store Admin_ID after verification
+
+    def forgot_password():
+        global admin_id  # Use the global variable to keep track of Admin_ID
+
+        # Create a new frame for password recovery
+        recovery_frame = Frame(login_register_frame, bg="white", padx=20, pady=20, width=700, height=700)
+        recovery_frame.pack_propagate(False)  # Prevent resizing
+
+        recovery_label = Label(recovery_frame, text="Password Recovery", font=("Times new roman", 35, 'bold'),
+                               fg='#fd5602',
+                               bg="white")
+        recovery_label.place(x=(700 - recovery_label.winfo_reqwidth()) // 2, y=10)
+
+        # Label and Entry for Email or IC Number
+        Label(recovery_frame, text="IC Number or Email:", bg="white", font=("Arial", 14)).place(x=180, y=80)
+        reset_identifier_entry = Entry(recovery_frame, font=("Arial", 14))  # Define the entry widget here
+        reset_identifier_entry.place(x=180, y=110)
+
+        # Function to reset the password
+        def reset_password():
+            global admin_id  # Use the global variable
+            new_password = new_password_entry.get().strip()  # New password to set
+
+            if not new_password:
+                messagebox.showerror("Error", "Please enter a new password.")
+                return
+
+            # Validate new password length
+            if len(new_password) != 6:
+                messagebox.showerror("Error", "New password must be exactly 6 characters.")
+                return
+
+            try:
+                conn = connect_db()
+                cursor = conn.cursor()
+
+                # Update the password using the global admin_id
+                cursor.execute("UPDATE Admin SET Admin_Passcode = ? WHERE Admin_ID = ?", (new_password, admin_id))
+                conn.commit()
+                messagebox.showinfo("Success", "Password has been reset successfully.")
+
+                # Automatically go back to the login frame after resetting the password
+                recovery_frame.destroy()  # Destroy the recovery frame
+                show_login_frame()  # Show the login frame
+
+            except sqlite3.Error as e:
+                messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
+
+            finally:
+                conn.close()
+
+        # Function to verify the identifier
+        def verify_identifier():
+            admin_identifier = reset_identifier_entry.get().strip()
+
+            if not admin_identifier:
+                messagebox.showerror("Error", "Please enter your IC Number or Email.")
+                return
+
+            try:
+                conn = connect_db()
+                cursor = conn.cursor()
+
+                # Check if the identifier (IC or Email) exists
+                cursor.execute("SELECT Admin_ID FROM Admin WHERE Admin_IC_Number = ? OR Admin_Email_Address = ?",
+                               (admin_identifier, admin_identifier))
+                admin = cursor.fetchone()
+
+                if admin:
+                    # Successful verification: Show password reset fields
+                    show_reset_fields(admin[0])
+                else:
+                    messagebox.showerror("Error", "No admin found with the provided IC Number or Email.")
+
+                conn.close()
+
+            except sqlite3.Error as e:
+                messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
+                conn.close()
+
+        def show_reset_fields(admin_id):
+            # Update and show the Admin ID label
+            admin_id_label.config(text=f"Admin ID: {admin_id}")
+            admin_id_label.place(x=180, y=210)  # Make sure it appears at the desired location
+
+            # Show the New Password fields and Reset Button
+            new_password_label.place(x=180, y=250)  # Show New Password label at x=180
+            new_password_entry.place(x=180, y=280)  # Show New Password entry at x=180
+            reset_button.place(x=180, y=350)  # Show Reset Button at x=180
+
+
+        hyperlink_font = font.Font(family="Arial", size=10, underline=True)
+
+        Button(recovery_frame, text="< Back to Login", command=lambda: (recovery_frame.destroy(), show_login_frame()),
+               bg="white", fg="blue", font=hyperlink_font, activebackground="white", borderwidth=0).place(x=0, y=0)
+
+        recovery_frame.place(relx=0.5, rely=0.5, anchor='center')  # Show recovery frame
+
+        # Button to verify the identifier
+        verify_button = Button(recovery_frame, text="Verify", command=verify_identifier, font=("Arial", 14, 'bold'),
+                               bg='#fd5602')
+        verify_button.place(x=180, y=150)
+
+        # Labels for Admin ID and New Password (hidden initially)
+        admin_id_label = Label(recovery_frame, text="", bg="white", font=("Arial", 14), fg='#fd5602')
+        admin_id_label.place_forget()  # Initially hidden
+
+        # Assign the "New Password" label to a variable
+        new_password_label = Label(recovery_frame, text="New Password:", bg="white", font=("Arial", 14))
+        new_password_label.place_forget()  # Initially hidden
+
+        new_password_entry = Entry(recovery_frame, show='*', font=("Arial", 14))
+        new_password_entry.place_forget()  # Initially hidden
+
+        reset_button = Button(recovery_frame, text="Reset Password", command=reset_password, font=("Arial", 14, 'bold'),
+                              bg='#fd5602', fg='white')
+        reset_button.place_forget()  # Initially hidden
+
+
+    label_font = ('Arial', 14, 'bold')
+    entry_font = ('Arial', 14)
+
+    # Create the login frame with specified width and height
+    login_frame = Frame(login_register_frame, bg="white", padx=20, pady=20, width=700, height=700)
+    login_frame.place(x=610, y=190)  # Adjusted absolute position
+    login_frame.pack_propagate(False)  # Prevent the frame from resizing
+
+    login_label = Label(login_frame, text="Admin Login", font=("Times new roman", 35, 'bold'), fg='#fd5602', bg="white")
+    login_label.place(x=(700 - login_label.winfo_reqwidth()) // 2, y=10)
+
+    Label(login_frame, text="IC Number:", bg="white", font=label_font).place(x=220, y=80)
+    login_ic_num_entry = Entry(login_frame, font=entry_font)
+    login_ic_num_entry.place(x=220, y=110)
+
+    Label(login_frame, text="Passcode:", bg="white", font=label_font).place(x=220, y=150)
+    login_passcode_entry = Entry(login_frame, show='*', font=entry_font)
+    login_passcode_entry.place(x=220, y=180)
+
+    login_button = Button(login_frame, text="Login", command=login_admin, font=("Arial", 14, 'bold'), bg='#fd5602',
+                          fg='white')
+    login_button.place(x=200, y=350)
+
+    hyperlink_font = font.Font(family="Arial", size=14, underline=True)
+
+    Button(login_frame, text="Forgot Password?", command=forgot_password, bg="white", fg="#fd5602", font=hyperlink_font,
+           activebackground="white", borderwidth=0).place(x=(700 - login_label.winfo_reqwidth()) // 1.8, y=450)
+
+    # Button to switch to registration form
+    Button(login_frame, text="Register", command=show_register_frame, bg="#fd5602", font=("Arial", 14, 'bold'),
+           fg='white').place(x=350, y=350)
+
+    # Create the registration frame with specified width and height (initially hidden)
+    register_frame = Frame(login_register_frame, bg="white", padx=20, pady=20, width=700, height=700)
+    register_frame.pack_propagate(False)  # Prevent the frame from resizing
+
+    register_label = Label(register_frame, text="Register Admin", font=("Times new roman", 35, 'bold'), fg='#fd5602',
+                           bg="white")
+    register_label.place(x=(700 - register_label.winfo_reqwidth()) // 2, y=10)
+
+    Label(register_frame, text="Name:", bg="white", font=label_font).place(x=220, y=80)
+    name_entry = Entry(register_frame, font=entry_font)
+    name_entry.place(x=220, y=110)
+
+    Label(register_frame, text="IC Number:", bg="white", font=label_font).place(x=220, y=150)
+    ic_entry = Entry(register_frame, font=entry_font)
+    ic_entry.place(x=220, y=180)
+
+    Label(register_frame, text="Gender:", bg="white", font=label_font).place(x=220, y=220)
+    gender_entry = ttk.Combobox(register_frame, font=entry_font,
+                                values=["Male", "Female", "Other"])  # Dropdown for gender
+    gender_entry.place(x=220, y=250)
+    gender_entry.current(0)  # Set default selection to the first option ("Male")
+
+    Label(register_frame, text="Phone Number:", bg="white", font=label_font).place(x=220, y=290)
+    phone_entry = Entry(register_frame, font=entry_font)
+    phone_entry.place(x=220, y=320)
+
+    Label(register_frame, text="Passcode:", bg="white", font=label_font).place(x=220, y=360)
+    passcode_entry = Entry(register_frame, font=entry_font)
+    passcode_entry.place(x=220, y=390)
+
+    Label(register_frame, text="Email Address:", bg="white", font=label_font).place(x=220, y=430)
+    email_entry = Entry(register_frame, font=entry_font)
+    email_entry.place(x=220, y=460)
+
+    register_button = Button(register_frame, text="Register", command=register_admin, font=("Arial", 14, 'bold'),
+                             bg='#fd5602', fg='white')
+    register_button.place(x=200, y=560)
+
+    # Button to switch back to login form
+    Button(register_frame, text="Back to Login", command=show_login_frame, bg="#fd5602", font=("Arial", 14, 'bold'),
+           fg='white').place(x=350, y=560)
+
+    # Start with login frame
+    login_frame.place(x=610, y=190)  # Adjust initial position for visibility
+
+'''
+
+
+def add_marker_to_db(lat, lon, text, icon_path):
+    """Insert marker details into the database."""
+    cursor.execute('INSERT INTO markers (lat, lon, text, icon_path) VALUES (?, ?, ?, ?)',
+                   (lat, lon, text, icon_path))
+    conn.commit()
+
+
+def add_initial_users():
+    """Add predefined users to the database with specific locations."""
+    users = [
+        {"lat": 5.3521073, "lon": 100.3001165, "text": "Sarah",
+         "icon_path": "C:/Users/Vennis/Downloads/GreenMarker.png"},  # Sarah matches Stall 1
+        {"lat": 5.3130725, "lon": 100.2768388, "text": "John",
+         "icon_path": "C:/Users/Vennis/Downloads/GreenMarker.png"},  # John matches Stall 2
+        {"lat": 5.3301444, "lon": 100.2655045, "text": "Alice",
+         "icon_path": "C:/Users/Vennis/Downloads/GreenMarker.png"},  # Alice matches Stall 3
+        {"lat": 5.3376014, "lon": 100.2211739, "text": "Mike",
+         "icon_path": "C:/Users/Vennis/Downloads/GreenMarker.png"},  # Mike matches Stall 4
+        {"lat": 5.4108194, "lon": 100.3348786, "text": "Emma",
+         "icon_path": "C:/Users/Vennis/Downloads/GreenMarker.png"},  # Emma matches Stall 5
+        {"lat": 5.270447, "lon": 100.4196629, "text": "Ahmad", "icon_path": "C:/Users/Vennis/Downloads/GreenMarker.png"}
+    ]
+
+    # Clear existing users to prevent duplicates (optional)
+    cursor.execute('DELETE FROM markers')
+    conn.commit()
+
+    for user in users:
+        add_marker_to_db(user["lat"], user["lon"], user["text"], user["icon_path"])
+
+
+# Define the fixed stalls
+stalls = {
+    "Stall 1": {"lat": 5.3521073, "lon": 100.3001165},
+    "Stall 2": {"lat": 5.3130725, "lon": 100.2768388},
+    "Stall 3": {"lat": 5.3301444, "lon": 100.2655045},
+    "Stall 4": {"lat": 5.3376014, "lon": 100.2211739},
+    "Stall 5": {"lat": 5.4108194, "lon": 100.3348786},
+    "Stall 6": {"lat": 5.270447, "lon": 100.4196629}
+}
+
+
+def get_assigned_stall(user_name):
+    """Return the assigned stall for a given user."""
+    assignment = {
+        "Sarah": "Stall 1",
+        "John": "Stall 2",
+        "Alice": "Stall 3",
+        "Mike": "Stall 4",
+        "Emma": "Stall 5",
+        "Ahmad": "Stall 6"
+    }
+    return assignment.get(user_name, None)
+
+
+def load_markers_from_db(user_lat, user_lon, tolerance=0.001):
+    """Load markers from the database and display them on the map, matching user location with assigned stalls."""
+    cursor.execute('SELECT lat, lon, text FROM markers')
+    rows = cursor.fetchall()
+
+    for lat, lon, text in rows:
+        assigned_stall = get_assigned_stall(text)
+        if not assigned_stall:
+            # If no assigned stall found, default to red marker
+            icon_path = "C:/Users/Vennis/Downloads/RedMarker.png"
+        else:
+            stall_coords = stalls.get(assigned_stall)
+            if stall_coords:
+                # Calculate distance between user location and assigned stall
+                lat_diff = abs(stall_coords["lat"] - lat)
+                lon_diff = abs(stall_coords["lon"] - lon)
+                if lat_diff <= tolerance and lon_diff <= tolerance:
+                    icon_path = "C:/Users/Vennis/Downloads/GreenMarker.png"  # Matching location
+                else:
+                    icon_path = "C:/Users/Vennis/Downloads/RedMarker.png"  # Not matching
+            else:
+                icon_path = "C:/Users/Vennis/Downloads/RedMarker.png"  # Stall data missing
+
+        # Load and resize the marker icon
+        try:
+            icon_image = Image.open(icon_path)
+            icon_image = icon_image.resize((80, 80), Image.LANCZOS)
+            custom_icon = ImageTk.PhotoImage(icon_image)
+        except Exception as e:
+            print(f"Error loading icon for {text}: {e}")
+            continue  # Skip this marker if icon fails to load
+
+        # Set the marker on the map with the correct icon
+        marker = map_widget.set_marker(lat, lon, text=text, icon=custom_icon)
+        marker.command = on_click
+
+
+def on_click(marker):
+    print(f"Marker clicked: {marker.position}")
+
+
+def toggle_menu():
+    def collapse_toggle_menu():
+        toggle_menu_fm.destroy()
+        toggle_btn.config(text=' ≡ ')
+        toggle_btn.config(command=toggle_menu)
+
+    toggle_menu_fm = Frame(root, bg='#fd5602')
+    title_font = ('Nunito', 18, 'bold')
+
+    location_btn = Button(toggle_menu_fm, text='Live Location Tracking', font=title_font, bd=0, fg='#fedebe',
+                          bg='#fd5602', command=lambda: (live_location(), collapse_toggle_menu()))
+    location_btn.place(x=20, y=0)
+
+    contract_btn = Button(toggle_menu_fm, text='Contract Renewal Management', font=title_font, bd=0, fg='#fedebe',
+                          bg='#fd5602', command=lambda: (contract_renewal(), collapse_toggle_menu()))
+    contract_btn.place(x=20, y=50)
+
+    tenant_btn = Button(toggle_menu_fm, text='Tenant & Stall Management', font=title_font, bd=0, fg='#fedebe',
+                        bg='#fd5602', command=lambda: (create_tenant_stall_frame(), collapse_toggle_menu()))
+    tenant_btn.place(x=20, y=100)
+
+    payment_btn = Button(toggle_menu_fm, text='Payment Management', font=title_font, bd=0, fg='#fedebe', bg='#fd5602')
+    payment_btn.place(x=20, y=150)
+
+    analytics_btn = Button(toggle_menu_fm, text='Analytics & Reports', font=title_font, bd=0, fg='#fedebe',
+                           bg='#fd5602', command=lambda: (analytics_and_report(), collapse_toggle_menu()))
+    analytics_btn.place(x=20, y=200)
+
+    inbox_btn = Button(toggle_menu_fm, text='Inbox', font=title_font, bd=0, fg='#fedebe', bg='#fd5602')
+    inbox_btn.place(x=20, y=250)
+
+    settings_btn = Button(toggle_menu_fm, text='Settings', font=title_font, bd=0, fg='#fedebe', bg='#fd5602',
+                          command=lambda: (general_setting(), collapse_toggle_menu()))
+    settings_btn.place(x=20, y=300)
+
+    window_height = 1080
+    toggle_menu_fm.place(x=0, y=50, height=window_height, width=420)
+
+    toggle_btn.config(text=' X ')
+    toggle_btn.config(command=collapse_toggle_menu)
+
+
+head_frame = Frame(root, bg='#fd5602')
+
+toggle_btn = Button(head_frame, text=' ≡ ', bg='#fd5602', fg='#fedebe', font=('Bold', 20), bd=0,
+                    activebackground='#fedebe', activeforeground='yellow', command=toggle_menu)
+toggle_btn.pack(side=LEFT)
+
+title_lb = Label(head_frame, text='Government Rental System - Admin Dashboard', fg='#fedebe', bg='#fd5602',
+                 font=('Impact', 20))
+title_lb.pack(side=LEFT)
+
+head_frame.pack(side=TOP, fill=X)
+head_frame.pack_propagate(False)
+head_frame.configure(height=50)
+
+
+def get_nearest_stall(user_lat, user_lon, tolerance=0.01):
+    """Find the nearest stall to the user based on latitude and longitude within a tolerance."""
+    # This function is now integrated into load_markers_from_db for each user
+    pass  # Not used anymore
+
+
+def live_location():
+    global location_frame, location_label
+    location_frame = Frame(main_frame)
+    location_frame.place(relwidth=1, relheight=1)
+
+    global map_widget
+    map_widget = tkintermapview.TkinterMapView(location_frame, width=1600, height=700)
+    map_widget.place(x=150, y=150)
+
+    map_widget.set_position(5.285153, 100.456238)  # Center map on Penang
+    map_widget.set_zoom(15)
+
+    location_label = Label(location_frame, text="", font=('Arial', 12), bg='#fd5602', fg='white')
+    location_label.place(x=150, y=50)
+
+    add_initial_users()  # Add predefined users
+
+    load_markers_from_db(5.285153, 100.456238)
+
+    # Create a search bar above the map
+    search_frame = Frame(location_frame)
+    search_frame.place(x=150, y=100)
+
+    search_entry = Entry(search_frame, font=('Arial', 12), width=30)
+    search_entry.pack(side=LEFT, padx=5)
+
+    search_btn = Button(search_frame, text="Search", font=('Arial', 12, 'bold'),
+                        command=lambda: perform_search(search_entry.get()))
+    search_btn.pack(side=LEFT)
+
+    # Add a refresh button below the map
+    refresh_btn = Button(location_frame, text="Refresh ↻", font=('Arial', 12, 'bold'),
+                         command=lambda: load_markers_from_db(5.285153, 100.456238),
+                         bd=0, highlightthickness=0, relief='flat', fg='blue')
+    refresh_btn.place(x=150, y=870)
+
+
+def perform_search(query):
+    geolocator = Nominatim(user_agent="YourAppName/1.0 (your_email@example.com)")
+
+    try:
+        location = geolocator.geocode(f"{query}, Penang, Malaysia")
+        if location:
+            map_widget.set_position(location.latitude, location.longitude)
+            map_widget.set_zoom(15)
+
+            location_label.config(text=f"Moved to: {location.address} at ({location.latitude}, {location.longitude})")
+            print(f"Moved to: {location.address} at ({location.latitude}, {location.longitude})")
+
+            # Optionally, update the user's location in the database if needed
+            # For example, prompt user to select which user's location to update
+        else:
+            location_label.config(text="Location not found. Please enter a valid postcode.")
+    except Exception as e:
+        location_label.config(text=f"Error occurred: {e}")
+
+
+def add_stalls_info():
+    """Optional: Display stall locations on the map as reference (without markers)."""
+    # You can add visual indicators like circles or lines if needed
+    pass
+
+
+def on_treeview_select(event, treeview):
+    selected_item = treeview.selection()
+    if selected_item:
+        item_values = treeview.item(selected_item)['values']
+
+        # Update the entry fields with the selected row's data
+        # Set the state of entry fields to normal before updating
+        for entry in [request_id_entry, stall_id_entry, postcode_entry, tenant_id_entry,
+                      username_entry, contact_entry, status_entry, payment_entry, stallmg_entry, violation_entry,
+                      endDate_entry]:
+            entry.config(state='normal')  # Enable editing
+
+        request_id_entry.delete(0, END)
+        request_id_entry.insert(0, item_values[0])
+
+        stall_id_entry.delete(0, END)
+        stall_id_entry.insert(0, item_values[1])
+
+        postcode_entry.delete(0, END)
+        postcode_entry.insert(0, item_values[2])
+
+        tenant_id_entry.delete(0, END)
+        tenant_id_entry.insert(0, item_values[3])
+
+        username_entry.delete(0, END)
+        username_entry.insert(0, item_values[4])
+
+        contact_entry.delete(0, END)
+        contact_entry.insert(0, item_values[5])
+
+        status_entry.delete(0, END)
+        status_entry.insert(0, item_values[6])
+
+        payment_entry.delete(0, END)
+        payment_entry.insert(0, item_values[7])
+
+        stallmg_entry.delete(0, END)
+        stallmg_entry.insert(0, item_values[8])
+
+        violation_entry.delete(0, END)
+        violation_entry.insert(0, item_values[9])
+
+        endDate_entry.delete(0, END)
+        endDate_entry.insert(0, item_values[10])
+
+        # Set the state of entry fields to readonly after updating
+        for entry in [request_id_entry, stall_id_entry, postcode_entry, tenant_id_entry,
+                      username_entry, contact_entry, status_entry, payment_entry, stallmg_entry, violation_entry,
+                      endDate_entry]:
+            entry.config(state='readonly')
+
+
+def approve_selected():
+    selected_item = treeview.selection()
+    if selected_item:
+        # Update the status entry to 'Approved'
+        status_entry.config(state='normal')  # Enable editing
+        status_entry.delete(0, END)
+        status_entry.insert(0, "Approved")
+        status_entry.config(state='readonly')  # Set back to readonly
+
+        # Get the selected item ID (Request_ID) to update the database
+        request_id = treeview.item(selected_item)['values'][0]  # Assuming Request_ID is the first column
+        refresh_treeview()
+
+        # Update the database
+        conn = sqlite3.connect('govRental.db')
+        cursor = conn.cursor()
+        cursor.execute("UPDATE PendingApprovalRequest SET Status = ? WHERE Request_ID = ?", ("Approved", request_id))
+        conn.commit()
+        conn.close()
+
+
+def open_reject_reason_window(request_id):
+    # Create a new Toplevel window
+    reject_window = Toplevel()
+    reject_window.title("Reason for Rejection")
+    reject_window.geometry("600x350")
+
+    # Add a label
+    Label(reject_window, text="Select a reason for rejection:").pack(pady=10)
+
+    # Create a Combobox for rejection reasons
+    reasons = ["Late payment history", "Bad stall management"]
+    reason_combobox = ttk.Combobox(reject_window, values=reasons, state="readonly")
+    reason_combobox.pack(pady=10)
+    reason_combobox.current(0)  # Set the default selection
+
+    # Function to update status
+    def update_status(request_id, new_status):
+        conn = sqlite3.connect('govRental.db')
+        cursor = conn.cursor()
+        cursor.execute("UPDATE PendingApprovalRequest SET Status = ? WHERE Request_ID = ?", (new_status, request_id))
+        conn.commit()
+        conn.close()
+
+    # Function to handle submission
+    def submit_reason():
+        # Get the selected item ID (Request_ID)
+        selected_item = treeview.selection()
+        if selected_item:
+            request_id = treeview.item(selected_item)['values'][0]  # Assuming Request_ID is the first column
+
+            # Fetch the current payment_history and stall_management for the selected request
+            conn = sqlite3.connect('govRental.db')
+            cursor = conn.cursor()
+            cursor.execute("SELECT Payment_History, Stall_Management FROM PendingApprovalRequest WHERE Request_ID = ?",
+                           (request_id,))
+            payment_history, stall_management = cursor.fetchone()
+
+            # Get the selected reason from the drop-down
+            rejection_reason = reason_combobox.get()  # Use reason_combobox
+
+            # Logic to check conditions
+            if rejection_reason == "Late payment history" and payment_history != 0:
+                print("Yes")
+                messagebox.showinfo("Invalid Reason",
+                                    "Rejection reason 'Late payment history' can only be selected when payment history is 0.")
+                # Reset status to Pending
+                update_status(request_id, "Pending")
+                refresh_treeview()
+                return
+
+            if rejection_reason == "Bad stall management" and stall_management != 0:
+                print("No")
+                messagebox.showinfo("Invalid Reason",
+                                    "Rejection reason 'Bad stall management' can only be selected when stall management is 0.")
+                # Reset status to Pending
+                update_status(request_id, "Pending")
+                refresh_treeview()
+                return
+
+            # If conditions are met, proceed to update the status and reason
+            cursor.execute("UPDATE PendingApprovalRequest SET Status = ?, Rejection_Reason = ? WHERE Request_ID = ?",
+                           ("Rejected", rejection_reason, request_id))
+            conn.commit()
+            conn.close()
+
+            # Refresh the treeview to reflect changes
+            refresh_treeview()
+            reject_window.destroy()  # Close the reject window after submission
+
+    # Submit button
+    submit_button = Button(reject_window, text="Submit", command=submit_reason)
+    submit_button.pack(pady=20)
+
+
+def reject_selected():
+    selected_item = treeview.selection()
+    if selected_item:
+        # Get the selected item ID (Request_ID) to update the database
+        request_id = treeview.item(selected_item)['values'][0]  # Assuming Request_ID is the first column
+
+        # Open the reason input window
+        open_reject_reason_window(request_id)
+
+
+def pending_selected():
+    selected_item = treeview.selection()
+    if selected_item:
+        # Update the status entry to 'Pending'
+        status_entry.config(state='normal')  # Enable editing
+        status_entry.delete(0, END)
+        status_entry.insert(0, "Pending")
+        status_entry.config(state='readonly')  # Set back to readonly
+
+        # Get the selected item ID (Request_ID) to update the database
+        request_id = treeview.item(selected_item)['values'][0]  # Assuming Request_ID is the first column
+
+        # Update the database
+        conn = sqlite3.connect('govRental.db')
+        cursor = conn.cursor()
+        cursor.execute("UPDATE PendingApprovalRequest SET Status = ? WHERE Request_ID = ?", ("Pending", request_id))
+        conn.commit()
+        conn.close()
+
+
+def refresh_treeview():
+    # Clear the current data in the Treeview
+    for item in treeview.get_children():
+        treeview.delete(item)
+
+    # Fetch fresh tenant data
+    tenant_data = fetch_tenant_data()
+    for tenant in tenant_data:
+        treeview.insert('', 'end', values=tenant)
+
+    # Schedule the next refresh
+    treeview.after(10000, refresh_treeview)  # Refresh every 3000 milliseconds (3 seconds)
+
+
+# Function to create the tenant stall Treeview
+def tenant_stall_treeview():
+    global request_id_entry, stall_id_entry, postcode_entry, tenant_id_entry, username_entry, contact_entry
+    global status_entry, payment_entry, stallmg_entry, violation_entry, endDate_entry, treeview  # Declare them as global
+
+    location_frame.destroy()  # Assuming `location_frame` is a global variable created elsewhere
+
+    for widget in contract_frame.winfo_children():
+        if isinstance(widget, Frame):  # Only destroy frames, keep the navigation buttons
+            widget.destroy()
+
+    style = ttk.Style()
+    style.configure("Treeview.Heading", font=("Arial", 12, 'bold'))
+    style.configure("Treeview", font=("Arial", 12))
+
+    # Create a new frame
+    contract_frame2 = Frame(contract_frame, width=1350, height=800)
+    contract_frame2.place(x=500, y=100)
+
+    # Define columns for the Treeview
+    columns = (
+    'Request ID', 'Stall ID', 'Postcode', 'Tenant ID', 'Username', 'Contact Number', 'Status', 'Payment History',
+    'Stall Management', 'Contract Violation', 'Contract End Date')
+
+    # Create the Treeview
+    treeview = ttk.Treeview(contract_frame2, columns=columns, show='headings')
+
+    # Define column headings and widths
+    for column in columns:
+        treeview.heading(column, text=column, anchor='center')
+        treeview.column(column, anchor='center', width=150)  # Adjust width as needed
+
+    # Fetch data and insert into Treeview
+    tenant_data = fetch_tenant_data()
+    for tenant in tenant_data:
+        treeview.insert('', 'end', values=tenant)  # Ensure tenant is a tuple
+
+    # Place the Treeview widget
+    treeview.place(x=10, y=0, width=1320, height=350)
+
+    # Bind the select event to update entry fields
+    treeview.bind('<<TreeviewSelect>>', lambda event: on_treeview_select(event, treeview))
+
+    # --- Add Search Bar ---
+    search_frame = Frame(contract_frame2)
+    search_frame.place(x=10, y=360, width=1310, height=50)  # Position and size of search frame
+
+    search_label = Label(search_frame, text="Search:", font=("Arial", 14))
+    search_label.place(x=10, y=10)  # Position of the label within search_frame
+
+    search_entry = Entry(search_frame, font=("Arial", 14), width=30)
+    search_entry.place(x=80, y=10)  # Position of the entry within search_frame
+
+    search_btn = Button(search_frame, text="Search", font=("Arial", 14, 'bold'),
+                        command=lambda: search_treeview(treeview, search_entry.get()))
+    search_btn.place(x=430, y=4)  # Position of the search button
+
+    reset_btn = Button(search_frame, text="Reset", font=("Arial", 14, 'bold'),
+                       command=lambda: reset_treeview(treeview))
+    reset_btn.place(x=520, y=4)  # Position of the reset button
+
+    # Entry fields for selected data
+    request_ID_Label = Label(contract_frame2, text="Request ID:", font=('Arial', 14, 'bold'))
+    request_ID_Label.place(x=10, y=450)
+    request_id_entry = Entry(contract_frame2, font=("Arial", 14), width=15)
+    request_id_entry.place(x=210, y=450)
+
+    stall_ID_Label = Label(contract_frame2, text="Stall ID:", font=('Arial', 14, 'bold'))
+    stall_ID_Label.place(x=10, y=480)
+    stall_id_entry = Entry(contract_frame2, font=("Arial", 14), width=15)
+    stall_id_entry.place(x=210, y=480)
+
+    postcode_Label = Label(contract_frame2, text="Postcode:", font=('Arial', 14, 'bold'))
+    postcode_Label.place(x=10, y=510)
+    postcode_entry = Entry(contract_frame2, font=("Arial", 14), width=15)
+    postcode_entry.place(x=210, y=510)
+
+    tenant_id__Label = Label(contract_frame2, text="Tenant ID:", font=('Arial', 14, 'bold'))
+    tenant_id__Label.place(x=10, y=540)
+    tenant_id_entry = Entry(contract_frame2, font=("Arial", 14), width=15)
+    tenant_id_entry.place(x=210, y=540)
+
+    username_Label = Label(contract_frame2, text="Tenant Username:", font=('Arial', 14, 'bold'))
+    username_Label.place(x=10, y=570)
+    username_entry = Entry(contract_frame2, font=("Arial", 14), width=15)
+    username_entry.place(x=210, y=570)
+
+    contact_Label = Label(contract_frame2, text="Contact Number:", font=('Arial', 14, 'bold'))
+    contact_Label.place(x=10, y=600)
+    contact_entry = Entry(contract_frame2, font=("Arial", 14), width=15)
+    contact_entry.place(x=210, y=600)
+
+    status_Label = Label(contract_frame2, text="Status:", font=('Arial', 14, 'bold'))
+    status_Label.place(x=10, y=630)
+    status_entry = Entry(contract_frame2, font=("Arial", 14), width=15)
+    status_entry.place(x=210, y=630)
+
+    payment_Label = Label(contract_frame2, text="Payment History:", font=('Arial', 14, 'bold'))
+    payment_Label.place(x=550, y=450)
+    payment_entry = Entry(contract_frame2, font=("Arial", 14), width=15)
+    payment_entry.place(x=800, y=450)
+
+    stallmg_Label = Label(contract_frame2, text="Stall Management:", font=('Arial', 14, 'bold'))
+    stallmg_Label.place(x=550, y=480)
+    stallmg_entry = Entry(contract_frame2, font=("Arial", 14), width=15)
+    stallmg_entry.place(x=800, y=480)
+
+    violation_Label = Label(contract_frame2, text="Any contract violations:", font=('Arial', 14, 'bold'))
+    violation_Label.place(x=550, y=510)
+    violation_entry = Entry(contract_frame2, font=("Arial", 14), width=15)
+    violation_entry.place(x=800, y=510)
+
+    endDate_Label = Label(contract_frame2, text="Contract End Date:", font=('Arial', 14, 'bold'))
+    endDate_Label.place(x=550, y=540)
+    endDate_entry = Entry(contract_frame2, font=("Arial", 14), width=15)
+    endDate_entry.place(x=800, y=540)
+
+    approve_button = Button(contract_frame2, text="Approve", font=('Arial', 14, 'bold'), fg="black", bg="#fd5602",
+                            width=10, command=approve_selected)
+    approve_button.place(x=1200, y=650)
+
+    reject_button = Button(contract_frame2, text="Reject", font=('Arial', 14, 'bold'), fg="white", bg="#002400",
+                           width=10, command=reject_selected)
+    reject_button.place(x=1200, y=700)
+
+    pending_button = Button(contract_frame2, text="Pending", font=('Arial', 14, 'bold'), fg="white", bg="#002400",
+                            width=10, command=pending_selected)
+    pending_button.place(x=1200, y=750)
+
+
+def search_treeview(treeview, query):
+    """Search function to filter the Treeview based on the query."""
+    # Remove existing rows
+    for row in treeview.get_children():
+        treeview.delete(row)
+
+    # Fetch new data filtered by the query (case-insensitive search)
+    tenant_data = fetch_tenant_data()  # Fetch the original data
+    filtered_data = [tenant for tenant in tenant_data if query.lower() in str(tenant).lower()]
+
+    # Insert filtered data back into the Treeview
+    for tenant in filtered_data:
+        treeview.insert('', 'end', values=tenant)
+
+
+def reset_treeview(treeview):
+    """Reset the Treeview to show all data."""
+    # Clear the search entry and reload all data
+    for row in treeview.get_children():
+        treeview.delete(row)
+
+    # Fetch the original data
+    tenant_data = fetch_tenant_data()
+    for tenant in tenant_data:
+        treeview.insert('', 'end', values=tenant)
+
+    refresh_treeview()
+
+
+def contract_renewal():
+    global contract_frame, label1, label2, label3, show_label1, show_label2, show_label3, renewal_frame2
+    location_frame.destroy()
+
+    contract_frame = Frame(main_frame)
+    contract_frame.place(relwidth=1, relheight=1)
+
+    for widget in contract_frame.winfo_children():
+        if isinstance(widget, Frame) and widget != renewal_frame2:  # Skip nav_frame
+            widget.destroy()
+
+    def show_label1():
+        hide_all_labels()  # Hide all other labels
+        label1.place(x=500, y=25)  # Show label1
+        line1.place(x=500, y=label1.winfo_y() + 35, relwidth=0.7)  # Place line under label1
+        tenant_stall_treeview()  # Call Treeview function
+        print("Yes 1")
+
+    def show_label2():
+        hide_all_labels()  # Hide all other labels
+        label2.place(x=500, y=25)  # Show label2
+        line2.place(x=500, y=label2.winfo_y() + 35, relwidth=0.7)  # Place line under label2
+        # here is the treeview function name
+        upcoming_renewal()
+        print("Yes 2")
+
+    def show_label3():
+        hide_all_labels()  # Hide all other labels
+        label3.place(x=500, y=25)  # Show label3
+        line3.place(x=500, y=label3.winfo_y() + 35, relwidth=0.7)  # Place line under label3
+        expired_contract()
+        print("Yes 3")
+
+    def hide_all_labels():
+        label1.place_forget()
+        label2.place_forget()
+        label3.place_forget()
+        line1.place_forget()
+        line2.place_forget()
+        line3.place_forget()
+
+    # Buttons for contract management
+    request_button = Button(contract_frame, text="Pending Approval Request", font=("Arial", 16, 'bold'),
+                            fg="#BBCF8D", bg='#002400', activebackground="white", width=30,
+                            command=show_label1)
+    request_button.place(x=25, y=25)
+
+    upcoming_button = Button(contract_frame, text="Upcoming Renewals", font=("Arial", 16, 'bold'),
+                             fg="#BBCF8D", bg='#002400', activebackground="white", width=30, command=show_label2)
+    upcoming_button.place(x=25, y=75)
+
+    expired_button = Button(contract_frame, text="Expired Contracts", font=("Arial", 16, 'bold'),
+                            fg="#BBCF8D", bg='#002400', activebackground="white", width=30, command=show_label3)
+    expired_button.place(x=25, y=125)
+
+    # Labels for each section
+    label1 = Label(contract_frame, text="Pending Approval Request", font=("Arial", 20, 'bold'), fg='black')
+    label2 = Label(contract_frame, text="Upcoming Renewals", font=("Arial", 20, 'bold'), fg='black')
+    label3 = Label(contract_frame, text="Expired Contracts", font=("Arial", 20, 'bold'), fg='black')
+
+    # Create lines under each label
+    line1 = Canvas(contract_frame, height=2, bg='black')
+    line2 = Canvas(contract_frame, height=2, bg='black')
+    line3 = Canvas(contract_frame, height=2, bg='black')
+
+    # Initially hide all labels and lines
+    hide_all_labels()
+
+
+# Fetch tenant data from the SQLite database
+def fetch_tenant_data():
+    conn = sqlite3.connect('govRental.db')
+    cursor = conn.cursor()
+
+    # Ensure the SQL query selects the correct columns in the correct order
+    cursor.execute("""
+        SELECT 
+            Request_ID, 
+            Stall_ID, 
+            Postcode, 
+            Tenant_ID, 
+            Tenant_Username, 
+            Tenant_Phone_Number, 
+            Status, 
+            Payment_History, 
+            Stall_Management, 
+            Contract_Violation, 
+            Contract_End_Date 
+        FROM PendingApprovalRequest
+    """)
+    data = cursor.fetchall()
+
+    conn.close()
+    return data
+
+
+def upcoming_renewal():
+    global contract_frame
+
+    # Clear existing frames while keeping navigation buttons
+    for widget in contract_frame.winfo_children():
+        if isinstance(widget, Frame) and widget != contract_frame:
+            widget.destroy()
+
+    # Create a new renewal frame for upcoming renewals
+    renewal_frame2 = Frame(contract_frame, width=1350, height=800)
+    renewal_frame2.place(x=500, y=100)
+
+    # Initialize Treeview
+    initialize_treeview(renewal_frame2)
+
+    # Show upcoming renewals in the Treeview
+    show_upcoming_renewals()
+
+    upcoming_button = Button(renewal_frame2, text='Show Upcoming Renewals', command=show_upcoming_renewals,
+                             font=('Arial', 12, 'bold'), fg='#fedebe', bg='#fd5602', activebackground='white')
+    upcoming_button.place(x=0, y=380)
+
+    show_all_button = Button(renewal_frame2, text='Show All Records', command=show_all_records,
+                             font=('Arial', 12, 'bold'), fg='#fedebe', bg='#fd5602', activebackground='white')
+    show_all_button.place(x=0, y=420)
+
+    global send_reminder_button  # Declare send_reminder_button as global
+    send_reminder_button = Button(renewal_frame2, text='Remind Tenant to Renew Contract',
+                                  command=send_reminder_for_renewals, font=('Arial', 12, 'bold'), fg='sky blue',
+                                  bg='blue2', activebackground='white')
+    send_reminder_button.place(x=0, y=460)
+    send_reminder_button.place_forget()  # Initially hide the button
+
+    # Bind Treeview selection event
+    tree.bind('<<TreeviewSelect>>', on_treeview_select)
+
+
+def on_treeview_select(event):
+    selected_item = tree.selection()  # Get the selected item
+    if selected_item:
+        send_reminder_button.place(x=0, y=460)  # Show the button if something is selected
+    else:
+        send_reminder_button.place_forget()  # Hide the button if nothing is selected
+
+
+def initialize_treeview(parent_frame):
+    global tree  # Declare tree as global to access it in other functions
+    tree = ttk.Treeview(parent_frame, columns=(
+    'Stall_ID', 'Stall_Address', 'Tenant_ID', 'Tenant_Username', 'Contract_End_Date', 'Rental_Amount',
+    'Renewal_Status'), show='headings')
+
+    # Define the column headings
+    tree.heading('Stall_ID', text='Stall ID')
+    tree.heading('Stall_Address', text='Stall Address')
+    tree.heading('Tenant_ID', text='Tenant ID')
+    tree.heading('Tenant_Username', text='Tenant Username')
+    tree.heading('Contract_End_Date', text='Contract End Date')
+    tree.heading('Rental_Amount', text='Rental Amount')
+    tree.heading('Renewal_Status', text='Renewal Status')
+
+    # Set column widths (adjust these values as needed)
+    tree.column('Stall_ID', width=100, anchor='center')
+    tree.column('Stall_Address', width=400)
+    tree.column('Tenant_ID', width=100, anchor='center')
+    tree.column('Tenant_Username', width=200, anchor='center')
+    tree.column('Contract_End_Date', width=200, anchor='center')
+    tree.column('Rental_Amount', width=150, anchor='center')
+    tree.column('Renewal_Status', width=150, anchor='center')
+
+    # Configure styles
+    style = ttk.Style()
+    style.configure('Treeview.Heading', font=('Arial', 12, 'bold'))  # Heading font
+    style.configure('Treeview', font=('Arial', 12))  # Record font
+
+    # Position the Treeview and scrollbar in the window using place
+    tree.place(x=0, y=0, width=1350, height=350)
+
+
+def show_upcoming_renewals():
+    conn = sqlite3.connect('govRental.db')
+    cursor = conn.cursor()
+
+    # Calculate the date 30 days from now
+    current_date = datetime.now().date()
+    future_date = current_date + timedelta(days=30)
+
+    # Fetch upcoming renewals
+    cursor.execute('''SELECT Stall_ID, Stall_Address, Tenant_ID, Tenant_Username, Contract_End_Date, Rental_Amount, Status
+                      FROM Stall 
+                      WHERE Contract_End_Date BETWEEN ? AND ?''', (current_date, future_date))
+    rows = cursor.fetchall()
+    conn.close()
+
+    # Clear existing records in the Treeview
+    tree.delete(*tree.get_children())
+
+    # Insert upcoming renewal data into the Treeview
+    for row in rows:
+        tree.insert('', END, values=row)
+
+
+def show_all_records():
+    conn = sqlite3.connect('govRental.db')
+    cursor = conn.cursor()
+
+    # Fetch all records
+    cursor.execute('''SELECT Stall_ID, Stall_Address, Tenant_ID, Tenant_Username, Contract_End_Date, Rental_Amount, Status
+                      FROM Stall''')
+    rows = cursor.fetchall()
+    conn.close()
+
+    # Clear existing records in the Treeview
+    tree.delete(*tree.get_children())
+
+    # Insert all records data into the Treeview
+    for row in rows:
+        tree.insert('', END, values=row)
+
+
+def fetch_tenant_username(tenant_id):
+    conn = sqlite3.connect("govRental.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT Tenant_Username FROM Tenant WHERE Tenant_ID = ?", (tenant_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else None
+
+
+def send_reminder_for_renewals():
+    reminder_window = Toplevel()
+    reminder_window.title("Send Reminder")
+    reminder_window.geometry("600x400")
+    label_font = ("Arial", 12, 'bold')
+    entry_font = ("Arial", 12)
+
+    # Tenant ID Entry
+    tenant_id_label = Label(reminder_window, text="Tenant ID:")
+    tenant_id_label.pack(pady=5)
+    tenant_id_entry = Entry(reminder_window)
+    tenant_id_entry.pack(pady=5)
+
+    # Tenant Username Entry
+    username_label = Label(reminder_window, text="Tenant Username:")
+    username_label.pack(pady=5)
+    username_entry = Entry(reminder_window, state='readonly', font=entry_font)
+    username_entry.pack(pady=5)
+
+    # Function to update the entry state
+    def update_username_entry_state():
+        if username_entry.get():  # Check if there's a value
+            username_entry.config(state='readonly')  # Set to read-only if there's a value
+        else:
+            username_entry.config(state='normal')  # Set to normal state if empty
+
+    def fetch_username():
+        tenant_id = tenant_id_entry.get()
+        print(f"Fetching username for Tenant ID: {tenant_id}")  # Debugging line
+        tenant_username = fetch_tenant_username(tenant_id)
+        if tenant_username:
+            username_entry.delete(0, END)
+            username_entry.insert(0, tenant_username)
+            print(f"Found username: {tenant_username}")  # Debugging line
+            update_username_entry_state()  # Update entry state after setting value
+        else:
+            messagebox.showwarning("Input Error", "Tenant ID not found.")
+            print("Tenant ID not found.")  # Debugging line
+            username_entry.delete(0, END)  # Clear the entry if not found
+            update_username_entry_state()  # Update entry state
+
+    # Button to fetch Tenant Username
+    fetch_button = Button(reminder_window, text="Fetch Username", command=fetch_username)
+    fetch_button.pack(pady=5)
+
+    # Date Calendar
+    cal = Calendar(reminder_window, selectmode='day', year=2024, month=10, day=17)
+    cal.pack(pady=10)
+
+    # Time Dropdown
+    time_label = Label(reminder_window, text="Select Time:", font=label_font)
+    time_label.pack(pady=5)
+
+    time_options = [f"{hour:02d}:00" for hour in range(10, 19)] + [f"{hour:02d}:30" for hour in range(10, 18)]
+    time_combobox = ttk.Combobox(reminder_window, values=sorted(time_options), state="readonly", font=label_font)
+    time_combobox.pack(pady=5)
+
+    # Reminder Message Entry with default message
+    default_message = "Dear Tenant, your rental contract is due in 15 days. If you want to renew your contract, please click on 'YES' button."
+    message_label = Label(reminder_window, text="Reminder Message:", font=label_font)
+    message_label.pack(pady=5)
+
+    message_entry = Entry(reminder_window, width=100, font=entry_font)
+    message_entry.insert(0, default_message)
+    message_entry.pack(pady=5)
+
+    def save_reminder(tenant_id, tenant_username, datetime_str, message, date, time):
+        print(
+            f"Inserting into Reminders: Tenant_ID={tenant_id}, Tenant_Username={tenant_username}, Date_Time={datetime_str}, Message={message}")  # Debugging print
+        conn = sqlite3.connect("govRental.db")
+
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO Reminders (Tenant_ID, Tenant_Username, Date_Time, Message)
+                VALUES (?, ?, ?, ?)
+            ''', (tenant_id, tenant_username, datetime_str, message))  # Ensure this order is correct
+            conn.commit()
+
+            # Fetch the last entry to verify
+            cursor.execute("SELECT * FROM Reminders ORDER BY rowid DESC LIMIT 1")
+            last_entry = cursor.fetchone()
+            print("Last Entry:", last_entry)  # Debugging print
+
+            # Prepare reminder for JSON
+            reminder = {
+                "message": message,
+                "datetime": f"{date} {time}"  # Combine date and time correctly
+            }
+
+            # Save reminder to JSON file
+            with open("reminder.json", "w") as f:
+                json.dump(reminder, f)
+
+            # Show success message
+            messagebox.showinfo("Success", f"Reminder set for {date} at {time}.")
+
+        except sqlite3.Error as e:
+            print("Database error:", e)
+            messagebox.showerror("Error", "Failed to save reminder.")
+
+        except Exception as e:
+            print("General error:", e)
+            messagebox.showerror("Error", "An error occurred while saving the reminder.")
+
+        finally:
+            conn.close()  # Ensure the connection is closed
+
+    def set_reminder():
+        tenant_id = tenant_id_entry.get()
+        tenant_username = fetch_tenant_username(tenant_id)
+
+        if tenant_username is None:
+            messagebox.showwarning("Input Error", "Tenant ID not found.")
+            return
+
+        # Get selected date and time
+        selected_date = cal.get_date()
+        formatted_date = datetime.datetime.strptime(selected_date, "%m/%d/%y").strftime("%Y-%m-%d")
+        selected_time = time_combobox.get()
+
+        if not selected_time:
+            messagebox.showwarning("Input Error", "Please select a time.")
+            return
+
+        message = message_entry.get()
+        datetime_str = f"{formatted_date} {selected_time}"
+
+        # Call save_reminder with all required parameters
+        save_reminder(tenant_id, tenant_username, datetime_str, message, formatted_date, selected_time)
+
+    def view_reminders():
+        # Load reminders from the JSON file
+        try:
+            with open("reminders.json", "r") as f:
+                reminders = json.load(f)
+
+            # Filter reminders from the last 30 days
+            current_time = datetime.datetime.now()
+            reminders_list = []
+            for reminder in reminders:
+                reminder_time = datetime.datetime.strptime(reminder["datetime"], "%Y-%m-%d %H:%M")
+                if (current_time - reminder_time).days <= 30:
+                    reminders_list.append(f"Reminder: {reminder['message']}\nScheduled for: {reminder['datetime']}")
+
+            if reminders_list:
+                messagebox.showinfo("Reminders in the Last 30 Days", "\n\n".join(reminders_list))
+            else:
+                messagebox.showinfo("No Recent Reminders", "No reminders found in the last 30 days.")
+
+        except FileNotFoundError:
+            messagebox.showwarning("No Reminders Found", "No reminders have been set yet.")
+
+    # Set Reminder Button
+    send_button = Button(reminder_window, text="Send Reminder", command=set_reminder, font=label_font,
+                         background='#fd5602', activebackground='#fedebe')
+    send_button.pack(pady=20)
+
+    # View Reminders Button
+    view_button = Button(reminder_window, text="View Recently Sent Reminders", command=view_reminders, font=label_font,
+                         background='#002400', activebackground='#d4edda', fg='white')
+    view_button.pack(pady=10)
+
+    # Ensure the entry starts in the correct state
+    update_username_entry_state()
+
+
+def expired_contract():
+    for widget in contract_frame.winfo_children():
+        if isinstance(widget, Frame) and widget != contract_frame:
+            widget.destroy()
+        else:
+            pass
+
+    expired_frame2 = Frame(contract_frame, width=1350, height=800)
+    expired_frame2.place(x=500, y=100)
+
+    # Create and place a label in the renewal_frame2
+    expired_label = Label(expired_frame2, text='Expired Label', font=('Arial', 30))
+    expired_label.place(relx=0.5, rely=0.5, anchor='center')
+
+
+def create_tenant_stall_frame():
+    # Create a new frame to hold the tenant and stall management UI
+    tenant_and_stall_frame = Frame(main_frame)
+    tenant_and_stall_frame.place(relwidth=1, relheight=1)
+
+    # Call the function to add tenant and stall management UI to the frame
+    add_stall_and_assign_stall(tenant_and_stall_frame)
+
+
+def add_stall_and_assign_stall(tenant_and_stall):
+    global contract_start_date, contract_end_date
+
+    def update_contract_end_date():
+        """Update contract end date based on contract start date and rental period."""
+        try:
+            rental_days = int(rental_period_combobox.get().split()[0])  # Get number of days from rental period
+            contract_start_date = contract_start_entry.get_date()  # Get the selected start date
+
+            # Update the contract end date
+            contract_end_date = contract_start_date + timedelta(days=rental_days)
+
+            # Set the contract end date entry
+            contract_end_entry.set_date(contract_end_date)
+            print("Contract End Date Updated to:", contract_end_date)  # Debugging line
+        except Exception as e:
+            print("Error updating contract end date:", e)  # Error handling
+
+    def fetch_tenant_username(event=None):
+        tenant_id = tenant_id_entry.get()
+
+        if not tenant_id:
+            return
+
+        conn = sqlite3.connect('govRental.db')
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT Tenant_Username FROM Tenant WHERE Tenant_ID = ?", (tenant_id,))
+        result = cursor.fetchone()
+        conn.close()
+
+        if result:
+            tenant_username_entry.delete(0, END)
+            tenant_username_entry.insert(0, result[0])
+        else:
+            tenant_username_entry.delete(0, END)
+
+    def add_stall():
+        stall_address = address_entry.get()
+        postcode = postcode_entry.get()
+
+        if not stall_address or not postcode:  # Ensure rental period is also validated
+            messagebox.showerror("Error", "All fields are required!")
+            return
+
+        conn = sqlite3.connect('govRental.db')
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "INSERT INTO Stall (Stall_Address, Postcode, Status) VALUES (?, ?, 0)",
+            (stall_address, postcode))  # Include rental period in the insert
+
+        stall_id = cursor.lastrowid
+
+        conn.commit()
+        conn.close()
+
+        messagebox.showinfo("Success", f"Stall added successfully! Stall ID: {stall_id}")
+        address_entry.delete(0, END)
+        postcode_entry.delete(0, END)
+
+    def search_stalls_by_postcode():
+        postcode = search_postcode_entry.get()
+
+        if not postcode:
+            print(postcode)
+            messagebox.showerror("Error", "Please enter a postcode to search!")
+            return
+
+        conn = sqlite3.connect('govRental.db')
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT Stall_ID, Stall_Address FROM Stall WHERE Postcode = ? AND Status = 0",
+                       (postcode,))
+        stalls = cursor.fetchall()
+        conn.close()
+
+        stall_combobox['values'] = []
+
+        if stalls:
+            stall_combobox['values'] = [f"ID: {stall[0]}, Address: {stall[1]}" for stall in stalls]
+            messagebox.showinfo("Updates", "Available stalls already shown in the dropbox.")
+        else:
+            messagebox.showinfo("No Results", "No available stalls found for the given postcode.")
+
+    def assign_stall():
+        selected_stall = stall_combobox.get()
+        if not selected_stall:
+            messagebox.showerror("Error", "Please select a stall to assign.")
+            return
+
+        stall_id = selected_stall.split(",")[0].split(":")[1].strip()
+
+        tenant_id = tenant_id_entry.get()
+        tenant_username = tenant_username_entry.get()
+        rental_period = rental_period_combobox.get()  # Get the value from the combobox
+        rental_amount = rental_amount_entry.get()
+        deposit_amount = deposit_entry.get()
+        last_payment_date = last_payment_entry.get()
+
+        if not all([tenant_id, tenant_username, rental_period, rental_amount, deposit_amount, last_payment_date]):
+            messagebox.showerror("Error", "All fields are required!")
+            return
+
+        # Validate numeric inputs
+        try:
+            rental_amount_float = float(rental_amount)
+            deposit_amount_float = float(deposit_amount)
+        except ValueError:
+            messagebox.showerror("Error", "Rental amount and deposit amount must be valid numbers.")
+            return
+
+        # Calculate contract start and end dates
+        try:
+            rental_days = int(rental_period.split()[0])  # Assuming format is "30 days", "60 days", etc.
+            rental_period_combobox.bind("<<ComboboxSelected>>", update_contract_end_date)
+        except (ValueError, IndexError):
+            messagebox.showerror("Error", "Invalid rental period format. Please select a valid period.")
+            rental_period_combobox.bind("<<ComboboxSelected>>", update_contract_end_date)
+            return
+
+        contract_start_date = datetime.now()
+        contract_end_date = contract_start_date + timedelta(days=rental_days)
+        contract_start_date = contract_start_entry.get_date()  # Get the current date from the entry
+        contract_end_date = contract_end_entry.get_date()
+        contract_start_entry.set_date(contract_start_date)
+        contract_end_entry.set_date(contract_end_date)
+        # Get the current date from the entry
+
+        # Debugging: print current contract dates
+        print("Contract Start Date:", contract_start_date)
+        print("Contract End Date:", contract_end_date)
+
+        # Database operations to assign the stall
+        conn = sqlite3.connect('govRental.db')
+        cursor = conn.cursor()
+
+        cursor.execute('''UPDATE Stall 
+                          SET Status = ?, Tenant_ID = ?, Tenant_Username = ?, Rental_Period = ?, 
+                              Contract_Start_Date = ?, Contract_End_Date = ?, 
+                              Rental_Amount = ?, Deposit_Amount = ?, 
+                              Last_Payment_Date = ?
+                          WHERE Stall_ID = ?''',
+                       (1, tenant_id, tenant_username, rental_period,
+                        contract_start_date.strftime('%Y-%m-%d'), contract_end_date.strftime('%Y-%m-%d'),
+                        rental_amount_float, deposit_amount_float, last_payment_date, stall_id))
+
+        conn.commit()
+        conn.close()
+
+        messagebox.showinfo("Success", "Stall assigned to tenant successfully!")
+        clear_form()
+
+    def clear_form():
+        tenant_id_entry.delete(0, END)
+        tenant_username_entry.delete(0, END)
+        rental_period_combobox.set("")
+        rental_amount_entry.delete(0, END)
+        deposit_entry.delete(0, END)
+
+        last_payment_entry.set_date(datetime.now().date())
+        stall_combobox.set("")
+
+    def update_deposit_amount(event=None):
+        try:
+            rental_amount = float(rental_amount_entry.get())
+            deposit_amount = rental_amount * 2
+            deposit_entry.delete(0, END)
+            deposit_entry.insert(0, f"{deposit_amount:.2f}")
+        except ValueError:
+            deposit_entry.delete(0, END)
+
+    def add_tenant():
+        # Get values from entries
+        tenant_ic = tenant_ic_entry.get().strip()
+        tenant_name = tenant_name_entry.get().strip()
+        temp_password = pass_entry.get()
+
+        # Validate inputs
+        if not tenant_ic or not tenant_name:
+            messagebox.showerror("Error", "Please fill in all fields")
+            return
+
+        try:
+            # Connect to database
+            conn = sqlite3.connect('govRental.db')
+            cursor = conn.cursor()
+
+            # Check if IC already exists
+            cursor.execute("SELECT * FROM Tenant WHERE Tenant_IC_Number=?", (tenant_ic,))
+            if cursor.fetchone():
+                messagebox.showerror("Error", "Tenant with this IC already exists")
+                tenant_ic_entry.delete(0, END)
+                tenant_name_entry.delete(0, END)
+                return
+
+            # Generate username from IC number (last 6 digits)
+            username = tenant_name
+
+            # Insert new tenant
+            cursor.execute("""
+                INSERT INTO Tenant (
+                    Tenant_IC_Number,
+                    Tenant_Username, 
+                    Tenant_Password
+                ) VALUES (?, ?, ?)
+            """, (tenant_ic, tenant_name, temp_password))
+
+            conn.commit()
+            messagebox.showinfo("Success", f"Tenant added successfully!\nUsername: {username}")
+            tenant_ic_entry.delete(0, END)
+            tenant_name_entry.delete(0, END)
+
+            # Clear entries
+            tenant_ic_entry.delete(0, END)
+            tenant_name_entry.delete(0, END)
+            pass_entry.config(state='normal')
+            pass_entry.delete(0, END)
+            pass_entry.insert(0, "Pass1234")
+            pass_entry.config(state='readonly')
+
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", f"An error occurred: {str(e)}")
+        finally:
+            conn.close()
+
+    label_font = ('Arial', 14, 'bold')
+    entry_font = ('Arial', 14)
+
+    style = ttk.Style()
+    style.configure('TNotebook.Tab', font=('Arial', 15, 'bold'), padding=[20, 10], width=200)
+    style.configure('TNotebook', tabposition='n')
+    style.map('TNotebook.Tab', foreground=[("selected", "#fd5602")])
+
+    # Notebook widget
+    notebook = ttk.Notebook(tenant_and_stall)
+    notebook.pack(fill='both', expand=True)  # Use pack instead of place to properly expand
+
+    # Frame for Add Stall tab
+    add_stall_frame = Frame(notebook, width=1200, height=1000, bg='mint cream')
+    add_stall_frame.pack(fill='both', expand=True)
+    add_stall_frame.pack_propagate(False)
+
+    # Frame for Assign Stall tab
+    assign_stall_frame = Frame(notebook, width=1200, height=1000, bg='LavenderBlush2')
+    assign_stall_frame.pack(fill='both', expand=True)
+    assign_stall_frame.pack_propagate(False)
+
+    tenant_register_frame = Frame(notebook, width=1200, height=1000, bg='ivory2')
+    tenant_register_frame.pack(fill='both', expand=True)
+    tenant_register_frame.pack_propagate(False)
+
+    notebook.add(add_stall_frame, text="  Add New Stall  ")
+    notebook.add(assign_stall_frame, text="  Assign Stall to Tenant  ")
+    notebook.add(tenant_register_frame, text="  Register a New Tenant  ")
+
+    # Add Stall Tab
+    # Center all elements using a main container frame
+    container_frame = Frame(add_stall_frame, width=1200, height=1000, bg='mint cream')
+    container_frame.pack(fill='both', expand=True)
+    container_frame.pack_propagate(False)
+
+    # Add Stall Tab
+    stall_frame = Frame(container_frame, bg='mint cream')
+    stall_frame.pack(pady=(150, 0))
+    Label(stall_frame, text="Stall Address:", font=label_font, anchor='w', bg='mint cream').pack(side=LEFT, padx=5)
+    address_entry = Entry(stall_frame, width=30, font=entry_font)
+    address_entry.pack(side=LEFT)
+
+    postcode_frame = Frame(container_frame, bg='mint cream')
+    postcode_frame.pack(pady=20)
+    Label(postcode_frame, text="Postcode:", font=label_font, anchor='w', bg='mint cream').pack(side=LEFT, padx=5)
+    postcode_entry = Entry(postcode_frame, width=30, font=entry_font)
+    postcode_entry.pack(side=LEFT)
+
+    add_button = Button(container_frame, text="Add Stall", command=add_stall, font=('Arial', 12, 'bold'), fg='white',
+                        bg='#fd5602', activebackground='white', width=20)
+    add_button.pack(pady=20)
+
+    # Assign Stall Tab - Center elements
+    assign_container = Frame(assign_stall_frame, width=1200, height=1000, bg='LavenderBlush2')
+    assign_container.pack(fill='both', expand=True)
+    assign_container.pack_propagate(False)
+
+    search_frame = Frame(assign_container, bg='LavenderBlush2')
+    search_frame.pack(pady=(50, 0))
+    Label(search_frame, text="Search by Postcode:", font=label_font, anchor='w', bg='LavenderBlush2').pack(side=LEFT,
+                                                                                                           padx=5)
+    search_postcode_entry = Entry(search_frame, width=30, font=entry_font)
+    search_postcode_entry.pack(side=LEFT)
+
+    search_button = Button(assign_container, text="Search", command=search_stalls_by_postcode, fg='white', bg='#fd5602',
+                           activebackground='white', font=label_font)
+    search_button.pack(pady=5)
+
+    stall_frame = Frame(assign_container, bg='LavenderBlush2')
+    stall_frame.pack(pady=20)
+    Label(stall_frame, text="Available Stalls:", font=label_font, anchor='w', bg='LavenderBlush2').pack(side=LEFT,
+                                                                                                        padx=5)
+    stall_combobox = ttk.Combobox(stall_frame, width=40, font=entry_font)
+    stall_combobox.pack(side=LEFT)
+
+    tenant_id_frame = Frame(assign_container, bg='LavenderBlush2')
+    tenant_id_frame.pack(pady=20)
+    Label(tenant_id_frame, text="Tenant ID:", font=label_font, anchor='w', bg='LavenderBlush2').pack(side=LEFT, padx=5)
+    tenant_id_entry = Entry(tenant_id_frame, width=30, font=entry_font)
+    tenant_id_entry.pack(side=LEFT)
+
+    tenant_id_entry.bind("<FocusOut>", fetch_tenant_username)
+
+    username_frame = Frame(assign_container, bg='LavenderBlush2')
+    username_frame.pack(pady=20)
+    Label(username_frame, text="Tenant Username:", font=label_font, anchor='w', bg='LavenderBlush2').pack(side=LEFT,
+                                                                                                          padx=5)
+    tenant_username_entry = Entry(username_frame, width=30, font=entry_font)
+    tenant_username_entry.pack(side=LEFT)
+
+    rental_period_frame = Frame(assign_container, bg='LavenderBlush2')
+    rental_period_frame.pack(pady=20)
+    Label(rental_period_frame, text="Rental Period:", font=label_font, anchor='w', bg='LavenderBlush2').pack(side=LEFT,
+                                                                                                             padx=5)
+    rental_period_combobox = ttk.Combobox(rental_period_frame, values=["30 days", "60 days", "90 days", "120 days"],
+                                          width=30, font=entry_font)
+    rental_period_combobox.pack(side=LEFT)
+    rental_period_combobox.bind("<<ComboboxSelected>>", update_contract_end_date)
+
+    start_date_frame = Frame(assign_container, bg='LavenderBlush2')
+    start_date_frame.pack(pady=20)
+    Label(start_date_frame, text="Contract Start Date:", font=label_font, anchor='w', bg='LavenderBlush2').pack(
+        side=LEFT, padx=5)
+    contract_start_entry = DateEntry(start_date_frame, width=27, background='navy', foreground='white', borderwidth=2,
+                                     font=entry_font)
+    contract_start_entry.pack(side=LEFT)
+    contract_start_entry.bind("<<DateEntrySelected>>", lambda event: update_contract_end_date())
+
+    end_date_frame = Frame(assign_container, bg='LavenderBlush2')
+    end_date_frame.pack(pady=20)
+    Label(end_date_frame, text="Contract End Date:", font=label_font, anchor='w', bg='LavenderBlush2').pack(side=LEFT,
+                                                                                                            padx=5)
+    contract_end_entry = DateEntry(end_date_frame, width=27, background='navy', foreground='white', borderwidth=2,
+                                   font=entry_font)
+    contract_end_entry.pack(side=LEFT)
+
+    rental_amount_frame = Frame(assign_container, bg='LavenderBlush2')
+    rental_amount_frame.pack(pady=20)
+    Label(rental_amount_frame, text="Rental Amount (RM):", font=label_font, anchor='w', bg='LavenderBlush2').pack(
+        side=LEFT, padx=5)
+    rental_amount_entry = Entry(rental_amount_frame, width=30, font=entry_font)
+    rental_amount_entry.pack(side=LEFT)
+
+    rental_amount_entry.bind("<FocusOut>", update_deposit_amount)
+
+    deposit_frame = Frame(assign_container, bg='LavenderBlush2')
+    deposit_frame.pack(pady=20)
+    Label(deposit_frame, text="Deposit Amount (RM):", font=label_font, anchor='w', bg='LavenderBlush2').pack(side=LEFT,
+                                                                                                             padx=5)
+    deposit_entry = Entry(deposit_frame, width=30, font=entry_font)
+    deposit_entry.pack(side=LEFT)
+
+    payment_date_frame = Frame(assign_container, bg='LavenderBlush2')
+    payment_date_frame.pack(pady=20)
+    Label(payment_date_frame, text="Last Payment Date:", font=label_font, anchor='w', bg='LavenderBlush2').pack(
+        side=LEFT, padx=5)
+    last_payment_entry = DateEntry(payment_date_frame, width=27, background='darkblue', foreground='white',
+                                   borderwidth=2, font=entry_font)
+    last_payment_entry.pack(side=LEFT)
+
+    assign_button = Button(assign_container, text="Assign Stall", command=assign_stall, fg='white', bg='#fd5602',
+                           activebackground='white', font=label_font)
+    assign_button.pack(pady=20)
+
+    # Tenant Register Tab - Center elements
+    register_container = Frame(tenant_register_frame, width=1200, height=1000, bg='ivory2')
+    register_container.pack(fill='both', expand=True)
+    register_container.pack_propagate(False)
+
+    ic_frame = Frame(register_container, bg='ivory2')
+    ic_frame.pack(pady=(150, 0))
+    Label(ic_frame, text="Tenant IC Number: ", font=label_font, anchor='w', bg='ivory2').pack(side=LEFT, padx=5)
+    tenant_ic_entry = Entry(ic_frame, width=30, font=entry_font)
+    tenant_ic_entry.pack(side=LEFT)
+
+    name_frame = Frame(register_container, bg='ivory2')
+    name_frame.pack(pady=20)
+    Label(name_frame, text="Tenant Name:", font=label_font, anchor='w', bg='ivory2').pack(side=LEFT, padx=5)
+    tenant_name_entry = Entry(name_frame, width=30, font=entry_font)
+    tenant_name_entry.pack(side=LEFT)
+
+    Label(register_container, text="* * * Temporary Password for every tenant is the same. * * *",
+          font=('Arial', 12, 'italic', 'bold'), fg='blue', bg='ivory2').pack(pady=5)
+
+    pass_frame = Frame(register_container, bg='ivory2')
+    pass_frame.pack(pady=20)
+    Label(pass_frame, text="Temporary Password :", font=label_font, anchor='w', bg='ivory2').pack(side=LEFT, padx=5)
+    pass_entry = Entry(pass_frame, width=30, font=entry_font, state='normal', readonlybackground='white')
+    pass_entry.pack(side=LEFT)
+
+    pass_entry.insert(0, "Pass1234")
+    pass_entry.config(state='readonly')
+
+    add_button = Button(register_container, text="Save Records", command=add_tenant, font=('Arial', 12, 'bold'),
+                        fg='white', bg='#fd5602', activebackground='white', width=20)
+    add_button.pack(pady=20)
+
+    # change Tenant database to Null for others except Tenant_IC_Number, Tenant_Username, Password
+
+
+def analytics_and_report():
+    report_frame = Frame(main_frame)
+    report_frame.place(relwidth=1, relheight=1)
+
+    radio_button_frame = Frame(report_frame, width=350, height=1080)
+    radio_button_frame.place(x=0, y=0)
+
+    chart_frame = Frame(report_frame, width=1500, height=800, bg='white')
+    chart_frame.place(x=350, y=100)
+
+    def show_selection():
+        selection = var.get()
+        print(f"Selected option: {selection}")
+
+    def yearly_income_report():
+        def get_yearly_income():
+            connection = sqlite3.connect('govRental.db')
+            cursor = connection.cursor()
+
+            try:
+                # Query to get total rental amount for each month
+                cursor.execute("""
+                    SELECT strftime('%Y-%m', payment_date) AS year_month, 
+                           COALESCE(SUM(rental_amount), 0) as total_rental
+                    FROM payments
+                    WHERE payment_date IS NOT NULL
+                    GROUP BY year_month
+                    ORDER BY year_month
+                """)
+                data = cursor.fetchall()
+
+                df = pd.DataFrame(data, columns=['year_month', 'rental'])
+                df['rental'] = pd.to_numeric(df['rental'])
+
+                if len(data) > 0:
+                    df['year_month'] = pd.to_datetime(df['year_month'], format='%Y-%m')
+                    min_date = df['year_month'].min()
+                    max_date = df['year_month'].max()
+                    date_range = pd.date_range(start=min_date, end=max_date, freq='MS')
+
+                    all_months_df = pd.DataFrame({'year_month': date_range})
+                    df = pd.merge(all_months_df, df, on='year_month', how='left')
+                    df['rental'] = df['rental'].fillna(0)
+
+                    months = [date.strftime('%B %Y') for date in df['year_month']]
+                    rental_values = df['rental'].tolist()
+                else:
+                    months = []
+                    rental_values = []
+
+            except Exception as e:
+                messagebox.showerror("Database Error", f"An error occurred: {e}")
+                print(e)
+                return [], []
+            finally:
+                connection.close()
+
+            return months, rental_values, df
+
+        def save_to_excel():
+            file_name = "Monthly_Rental_Report.xlsx"
+            try:
+                df.to_excel(file_name, index=False)
+                messagebox.showinfo("Excel Export", f"Data exported successfully to {file_name}")
+            except Exception as e:
+                messagebox.showerror("Excel Export Error", f"An error occurred while exporting data: {e}")
+                print(e)
+
+        def show_details():
+            details_window = Toplevel()
+            details_window.title("Rental Amount Details")
+            details_window.geometry("600x400")
+            details_window.configure(bg='white')
+
+            details_frame = Frame(details_window, bg='white')
+            details_frame.pack(padx=20, pady=20, fill=BOTH, expand=True)
+
+            title_label = Label(details_frame,
+                                text=f"Monthly Rental Breakdown for {year}",
+                                font=('Arial', 14, 'bold'),
+                                bg='white')
+            title_label.pack(pady=(0, 20))
+
+            headers_frame = Frame(details_frame, bg='white')
+            headers_frame.pack(fill=X, padx=10)
+
+            Label(headers_frame, text="Month", font=('Arial', 12, 'bold'),
+                  width=20, bg='white').pack(side=LEFT)
+            Label(headers_frame, text="Rental Amount (RM)", font=('Arial', 12, 'bold'),
+                  width=20, bg='white').pack(side=LEFT)
+
+            canvas = Canvas(details_frame, bg='white')
+            scrollbar = Scrollbar(details_frame, orient="vertical", command=canvas.yview)
+            scrollable_frame = Frame(canvas, bg='white')
+
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+
+            for month, rental in zip(months, rental_values):
+                row_frame = Frame(scrollable_frame, bg='white')
+                row_frame.pack(fill=X, padx=10, pady=2)
+
+                Label(row_frame, text=month, font=('Arial', 11),
+                      width=20, bg='white').pack(side=LEFT)
+                Label(row_frame, text=f"{rental:,.2f}", font=('Arial', 11),
+                      width=20, bg='white').pack(side=LEFT)
+
+            canvas.pack(side="left", fill="both", expand=True, padx=10, pady=(10, 0))
+            scrollbar.pack(side="right", fill="y", pady=(10, 0))
+
+        months, rental_values, df = get_yearly_income()
+
+        if not months or not rental_values:
+            return
+
+        # Calculate total rental amount
+        total_rental = sum(rental_values)
+        year = months[0].split()[-1] if months else ""
+
+        fig = plt.Figure(figsize=(12, 6))
+        fig.patch.set_facecolor('none')
+        canvas = FigureCanvasTkAgg(fig, master=chart_frame)
+        canvas_widget = canvas.get_tk_widget()
+
+        chart_frame_width = 1500
+        chart_frame_height = 800
+        canvas_width = 12 * 100
+        canvas_height = 6 * 100
+
+        x_position = (chart_frame_width - canvas_width) // 2
+        y_position = (chart_frame_height - canvas_height) // 2
+
+        canvas_widget.place(x=x_position, y=y_position)
+
+        total_label = Label(
+            chart_frame,
+            text=f"Total Rental Amount for Year {year}: RM {total_rental:,.2f}",
+            font=('Arial', 12, 'bold'),
+            bg='white',
+            fg='#002400'
+        )
+        total_label.place(
+            x=chart_frame_width // 2,
+            y=y_position + canvas_height + 35,
+            anchor='center'
+        )
+
+        # Add the Details button styled as a hyperlink
+        details_button = Label(
+            chart_frame,
+            text="Details",
+            font=('Arial', 10, 'underline'),
+            bg='white',
+            fg='blue',
+            cursor='hand2'  # Changes cursor to hand when hovering
+        )
+        details_button.place(
+            x=chart_frame_width // 2,
+            y=y_position + canvas_height + 65,  # 30 pixels below total_label
+            anchor='center'
+        )
+        details_button.bind('<Button-1>', lambda e: show_details())  # Bind click event
+        details_button.bind('<Enter>', lambda e: details_button.configure(fg='purple'))  # Change color on hover
+        details_button.bind('<Leave>',
+                            lambda e: details_button.configure(fg='blue'))  # Change back when mouse leaves
+
+        fig.clear()
+        ax = fig.add_subplot(111)
+        ax.set_facecolor('none')
+
+        bars = ax.bar(months, rental_values, color='#002400', alpha=0.7)
+        ax.set_title("Yearly Rental Amount", pad=20, fontsize=20, fontweight='bold', color='black')
+        ax.set_xlabel("Month", labelpad=10, fontsize=12, color='black')
+        ax.set_ylabel("Rental Amount (RM)", labelpad=10, fontsize=12, color='black')
+        ax.tick_params(colors='black')
+        ax.set_xticks(range(len(months)))
+        ax.set_xticklabels(months, rotation=45, ha='right', fontsize=9, color='black')
+        ax.grid(True, axis='y', linestyle='--', alpha=0.3, color='black')
+
+        fig.subplots_adjust(left=0.1, right=0.95, bottom=0.2, top=0.9)
+        canvas_widget.configure(bg='white')
+        canvas.draw()
+
+        # Add the "Excel File" button to export the data
+        excel_button = Button(
+            chart_frame,
+            text="Export Rental Report",
+            font=('Arial', 12, 'bold'),
+            bg='green',
+            fg='white',
+            command=save_to_excel
+        )
+        excel_button.place(x=10, y=chart_frame_height - 50)  # Position at bottom-left
+
+    def get_overdue_payments():
+        connection = sqlite3.connect('govRental.db')
+        cursor = connection.cursor()
+
+        try:
+            # Modified query to include month grouping and sort by month in descending order
+            cursor.execute("""
+                SELECT 
+                    payment_id,
+                    tenant_ID,
+                    tenant_username,
+                    strftime('%d-%m-%Y', payment_date) as formatted_date,
+                    strftime('%m-%Y', payment_date) as month_year,
+                    rental_amount,
+                    CAST(strftime('%d', payment_date) AS INTEGER) as day_of_month
+                FROM payments
+                WHERE CAST(strftime('%d', payment_date) AS INTEGER) > 7
+                ORDER BY payment_date DESC
+            """)
+            data = cursor.fetchall()
+
+            # Convert to DataFrame with new columns
+            df = pd.DataFrame(data, columns=['Payment ID', 'Tenant ID', 'Tenant Username',
+                                             'Payment Date', 'Month Year', 'Rental Amount', 'Day'])
+
+            # Format the rental amount
+            df['Rental Amount'] = df['Rental Amount'].apply(lambda x: f"RM {x:,.2f}")
+
+            # Drop the Day column
+            df = df.drop('Day', axis=1)
+
+            # Sort Month Year in descending order and then group
+            df['Sort Key'] = pd.to_datetime(df['Month Year'], format='%m-%Y')
+            df = df.sort_values('Sort Key', ascending=False)
+            df = df.drop('Sort Key', axis=1)
+
+            # Group by Month Year
+            grouped_df = df.groupby('Month Year', sort=False)
+
+            return grouped_df
+
+        except Exception as e:
+            messagebox.showerror("Database Error", f"An error occurred: {e}")
+            print(e)
+            return None
+        finally:
+            connection.close()
+
+    def overdue_payments_report():
+        # Get the grouped overdue payments data
+        grouped_df = get_overdue_payments()
+
+        if grouped_df is None or len(grouped_df) == 0:
+            message_label = Label(
+                chart_frame,
+                text="No overdue payments found.",
+                font=('Arial', 14, 'bold'),
+                bg='white',
+                fg='black'
+            )
+            message_label.place(relx=0.5, rely=0.4, anchor='center')
+            return
+
+        # Create main title
+        title_label = Label(
+            chart_frame,
+            text="Overdue Payments Report",
+            font=('Arial', 20, 'bold'),
+            bg='white',
+            fg='black'
+        )
+        title_label.place(relx=0.5, y=50, anchor='center')
+
+        # Create main frame for all tables
+        main_frame = Frame(chart_frame, bg='white')
+        main_frame.place(relx=0.5, y=120, anchor='n', width=1000, height=500)
+
+        # Create canvas and scrollbar for main frame
+        main_canvas = Canvas(main_frame, bg='white')
+        main_scrollbar = Scrollbar(main_frame, orient="vertical", command=main_canvas.yview)
+        scrollable_main_frame = Frame(main_canvas, bg='white')
+
+        scrollable_main_frame.bind(
+            "<Configure>",
+            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+        )
+
+        main_canvas.create_window((0, 0), window=scrollable_main_frame, anchor="nw")
+        main_canvas.configure(yscrollcommand=main_scrollbar.set)
+
+        # Column widths
+        widths = [12, 12, 20, 15, 15]  # Adjusted widths for each column
+        headers = ['Payment ID', 'Tenant ID', 'Tenant Username', 'Payment Date', 'Rental Amount']
+
+        # Create tables for each month
+        total_overdue = 0
+        for month_year, group in grouped_df:
+            # Month header
+            month_label = Label(
+                scrollable_main_frame,
+                text=f"Month: {month_year}",
+                font=('Arial', 12, 'bold'),
+                bg='white',
+                fg='#002400'
+            )
+            month_label.pack(pady=(20, 10))
+
+            # Create frame for this month's table
+            table_frame = Frame(scrollable_main_frame, bg='white')
+            table_frame.pack(fill=X, padx=10)
+
+            # Create headers
+            for col, (header, width) in enumerate(zip(headers, widths)):
+                Label(
+                    table_frame,
+                    text=header,
+                    font=('Arial', 11, 'bold'),
+                    bg='white',
+                    width=width
+                ).grid(row=0, column=col, padx=5, pady=5)
+
+            # Add data rows
+            for row_idx, (_, row) in enumerate(group.iterrows(), 1):
+                for col_idx, (value, width) in enumerate(zip(row[headers], widths)):
+                    Label(
+                        table_frame,
+                        text=str(value),
+                        font=('Arial', 10),
+                        bg='white',
+                        width=width
+                    ).grid(row=row_idx, column=col_idx, padx=5, pady=2)
+
+            # Add separator
+            separator = Frame(scrollable_main_frame, height=2, bg='grey')
+            separator.pack(fill=X, padx=20, pady=10)
+
+            total_overdue += len(group)
+
+        main_canvas.pack(side="left", fill="both", expand=True, padx=10)
+        main_scrollbar.pack(side="right", fill="y")
+
+        # Add total count label
+        total_label = Label(
+            chart_frame,
+            text=f"Total Overdue Payments: {total_overdue}",
+            font=('Arial', 12, 'bold'),
+            bg='white',
+            fg='black'
+        )
+        total_label.place(relx=0.5, y=650, anchor='center')
+
+    def generate_report():
+        selection = var.get()
+
+        for widget in chart_frame.winfo_children():
+            widget.destroy()
+
+        if selection == "Attendance":
+            report_label = Label(chart_frame,
+                                 text="Attendance Report",
+                                 font=('Arial', 20, 'bold'),
+                                 bg='white',
+                                 fg='#fd5602')
+            report_label.place(relx=0.5, rely=0.5, anchor='center')
+
+        elif selection == "Yearly Income":
+            yearly_income_report()
+
+        elif selection == "Overdue Payments":
+            overdue_payments_report()
+
+    var = StringVar(value="Attendance")
+    report_label = Label(chart_frame, text="Please select and click on generate to view analytic and report.",
+                         bg='white',
+                         fg='black', font=('Arial', 20, 'bold'))
+    report_label.place(relx=0.5, rely=0.5, anchor='center')
+
+    radio_button_font = ('Arial', 15, 'bold')
+    radio_attendance = Radiobutton(radio_button_frame, text="Attendance", variable=var, value="Attendance",
+                                   font=radio_button_font, command=show_selection)
+    radio_yearly_income = Radiobutton(radio_button_frame, text="Yearly Income", variable=var, value="Yearly Income",
+                                      font=radio_button_font, command=show_selection)
+    radio_overdue_payments = Radiobutton(radio_button_frame, text="Overdue Payments", variable=var,
+                                         value="Overdue Payments", font=radio_button_font, command=show_selection)
+
+    generate_button = Button(radio_button_frame, text="Generate", font=radio_button_font, fg="#BBCF8D",
+                             bg="#002400",
+                             activebackground="white", width=18, command=generate_report)
+    generate_button.place(x=50, y=300)
+
+    radio_attendance.place(x=50, y=100)
+    radio_yearly_income.place(x=50, y=150)
+    radio_overdue_payments.place(x=50, y=200)
+
+
+def general_setting():
+    def fetch_admin_id():
+        admin_ic = admin_ic_entry.get()
+        if admin_ic:
+            cursor.execute("SELECT Admin_ID, Admin_Name FROM Admin WHERE Admin_IC_Number = ?", (admin_ic,))
+            result = cursor.fetchone()
+            if result:
+                admin_id_entry.delete(0, END)  # Clear existing entry
+                admin_id_entry.insert(0, result[0])  # Insert fetched Admin ID
+                admin_id_entry.configure(state='readonly')
+                admin_name_entry.delete(0, END)  # Clear existing entry
+                admin_name_entry.insert(0, result[1])  # Insert fetched Admin ID
+                admin_name_entry.configure(state='readonly')
+            else:
+                admin_id_entry.delete(0, END)  # Clear if not found
+
+    def update_passcode():
+        new_passcode = new_passcode_entry.get()
+        confirm_passcode = confirm_passcode_entry.get()
+        old_passcode = old_passcode_entry.get()
+        admin_id = admin_id_entry.get()
+        admin_ic = admin_ic_entry.get()
+        admin_name = admin_name_entry.get()
+
+        if not admin_id or not admin_ic or not admin_name:
+            messagebox.showerror("Error", "Please fill in all fields.")
+            return
+
+        # Verify admin credentials
+        cursor.execute("SELECT Admin_ID, Admin_Name FROM Admin WHERE Admin_IC_Number = ?", (admin_ic,))
+        result = cursor.fetchone()
+        if not result or result[0] != admin_id or result[1] != admin_name:
+            messagebox.showerror("Error", "Invalid admin credentials. Please check your IC number, ID and name.")
+            admin_ic_entry.delete(0, END)
+            admin_id_entry.delete(0, END)
+            admin_name_entry.delete(0, END)
+            old_passcode_entry.delete(0, END)
+            new_passcode_entry.delete(0, END)
+            confirm_passcode_entry.delete(0, END)
+            return
+
+        if not old_passcode or not new_passcode or not confirm_passcode:
+            messagebox.showerror("Error", "Please fill in all passcode fields.")
+            old_passcode_entry.delete(0, END)
+            new_passcode_entry.delete(0, END)
+            confirm_passcode_entry.delete(0, END)
+            return
+
+        if new_passcode != confirm_passcode:
+            messagebox.showerror("Error", "New passcode and confirm passcode do not match.")
+            new_passcode_entry.delete(0, END)
+            confirm_passcode_entry.delete(0, END)
+            return
+
+        # Check if old passcode matches
+        cursor.execute("SELECT Admin_Passcode FROM Admin WHERE Admin_ID = ?", (admin_id,))
+        result = cursor.fetchone()
+        if result and result[0] == old_passcode:
+            try:
+                cursor.execute("UPDATE Admin SET Admin_Passcode = ? WHERE Admin_ID = ?", (new_passcode, admin_id))
+                conn.commit()
+                messagebox.showinfo("Success", "Passcode updated successfully!")
+                admin_ic_entry.delete(0, END)
+                admin_id_entry.config(state='normal')
+                admin_id_entry.delete(0, END)
+                admin_name_entry.config(state='normal')
+                admin_name_entry.delete(0, END)
+                old_passcode_entry.delete(0, END)
+                new_passcode_entry.delete(0, END)
+                confirm_passcode_entry.delete(0, END)
+                return
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to update passcode: {e}")
+                admin_ic_entry.delete(0, END)
+                admin_id_entry.delete(0, END)
+                admin_name_entry.delete(0, END)
+                old_passcode_entry.delete(0, END)
+                new_passcode_entry.delete(0, END)
+                confirm_passcode_entry.delete(0, END)
+                return
+        else:
+            messagebox.showerror("Error", "Old passcode is incorrect.")
+            admin_ic_entry.delete(0, END)
+            admin_id_entry.delete(0, END)
+            admin_name_entry.delete(0, END)
+            old_passcode_entry.delete(0, END)
+            new_passcode_entry.delete(0, END)
+            confirm_passcode_entry.delete(0, END)
+            return
+
+    def fetch_business_info(event):
+        # Fetch business information from the database
+        cursor.execute(
+            "SELECT Business_ID, Licence_No, Business_Name, Business_Hours, Location, Contact_No, Email_Address FROM Business_Information")  # Adjust your table name and columns
+        result = cursor.fetchone()
+        if result:
+            business_id_entry.delete(0, END)
+            business_id_entry.insert(0, result[0])  # Business_ID
+            business_id_entry.config(state='readonly')
+            license_entry.delete(0, END)
+            license_entry.insert(0, result[1])  # Licence_No
+            license_entry.config(state='readonly')
+            firm_name_entry.delete(0, END)
+            firm_name_entry.insert(0, result[2])  # Business_Name
+            firm_name_entry.config(state='readonly')
+            business_hours_entry.delete(0, END)
+            business_hours_entry.insert(0, result[3])  # Business_Hours
+            business_hours_entry.config(state='readonly')
+            location_entry.delete(0, END)
+            location_entry.insert(0, result[4])  # Location
+            location_entry.config(state='readonly')
+            contact_entry.delete(0, END)  # Clear existing entry for contact
+            contact_entry.insert(0, result[5])  # Contact_No
+            contact_entry.config(state='readonly')
+            email_entry.delete(0, END)  # Clear existing entry for email
+            email_entry.insert(0, result[6])  # Email_Address
+            email_entry.config(state='readonly')
+        else:
+            messagebox.showinfo("Info", "No business information found.")
+
+    # root = Tk()
+    # root.title("Admin Settings")
+    # root.geometry("1920x1080")
+
+    # welcome_label = Label(root, text='Welcome, Dear Admin.', fg='#fd5602', font=("Arial", 30, "bold"))
+    # welcome_label.place(x=720, y=120)  # Adjust the x and y coordinates as needed
+
+    setting_frame = Frame(main_frame)
+    setting_frame.place(relwidth=1, relheight=1)
+
+    welcome_label = Label(setting_frame, text='Welcome, Dear Admin.', fg='black', font=("Arial", 30, "bold"))
+    welcome_label.place(x=720, y=100)  # Adjust the x and y coordinates as needed
+
+    # Create a Notebook (tabs)
+    # notebook = ttk.Notebook(root)
+    # notebook.place(x=350, y=220, width=1200, height=600)  # Adjust the placement of the notebook
+
+    notebook = ttk.Notebook(setting_frame)
+    notebook.place(x=350, y=200, width=1200, height=600)  # Adjust the placement of the notebook
+
+    # Create frames for the tabs with white background
+    passcode_frame = Frame(notebook, width=1200, height=600, bg='white')  # Added white background
+    business_info_frame = Frame(notebook, width=1200, height=600, bg='white')  # Added white background
+
+    # Add frames to the notebook
+    notebook.add(passcode_frame, text="Change Passcode")
+    notebook.add(business_info_frame, text="Edit Business Information")
+
+    label_font = ("Arial", 16, "bold")
+    entry_font = ("Helvetica", 16)
+
+    # Change Passcode Tab
+    Label(passcode_frame, text="Admin IC:", bg='white', font=label_font).place(x=150, y=50)
+    admin_ic_entry = Entry(passcode_frame, width=30, font=entry_font)
+    admin_ic_entry.place(x=450, y=50)
+
+    # Add the binding after creating the Entry widget
+    admin_ic_entry.bind('<KeyRelease>', lambda e: fetch_admin_id())
+
+    Label(passcode_frame, text="Admin ID:", bg='white', font=label_font).place(x=150, y=100)
+    admin_id_entry = Entry(passcode_frame, width=30, font=entry_font)
+    admin_id_entry.place(x=450, y=100)
+
+    Label(passcode_frame, text="Your Name:", bg='white', font=label_font).place(x=150, y=150)
+    admin_name_entry = Entry(passcode_frame, width=30, font=entry_font)
+    admin_name_entry.place(x=450, y=150)
+
+    Label(passcode_frame, text="Old Passcode:", bg='white', font=label_font).place(x=150, y=200)
+    old_passcode_entry = Entry(passcode_frame, width=30, show='*', font=entry_font)
+    old_passcode_entry.place(x=450, y=200)
+
+    Label(passcode_frame, text="* * *  Must be 6 digit passcode.  * * *", bg='white', font=('Arial', 12, 'bold'),
+          fg='blue').place(x=450, y=235)
+
+    Label(passcode_frame, text="New Passcode:", bg='white', font=label_font).place(x=150, y=270)
+    new_passcode_entry = Entry(passcode_frame, width=30, show='*', font=entry_font)
+    new_passcode_entry.place(x=450, y=270)
+
+    Label(passcode_frame, text="Confirm New Passcode:", bg='white', font=label_font).place(x=150, y=320)
+    confirm_passcode_entry = Entry(passcode_frame, width=30, show='*', font=entry_font)
+    confirm_passcode_entry.place(x=450, y=320)
+
+    update_passcode_button = Button(passcode_frame, text="Update Passcode", command=update_passcode, width=20,
+                                    font=label_font, bg="#fd5602", fg="white")
+    update_passcode_button.place(x=310, y=400)
+
+    cancel_button = Button(passcode_frame, text="Cancel", width=20, font=label_font, bg="grey", fg="white",
+                           command=lambda: [admin_ic_entry.delete(0, END),
+                                            admin_id_entry.config(state='normal'),
+                                            admin_id_entry.delete(0, END),
+                                            admin_name_entry.config(state='normal'),
+                                            admin_name_entry.delete(0, END),
+                                            old_passcode_entry.delete(0, END),
+                                            new_passcode_entry.delete(0, END),
+                                            confirm_passcode_entry.delete(0, END)])
+    cancel_button.place(x=610, y=400)
+
+    # Edit Business Information Tab
+    Label(business_info_frame, text="Business ID:", bg='white', font=label_font).place(x=150, y=55)
+    business_id_entry = Entry(business_info_frame, width=12, font=entry_font)
+    business_id_entry.place(x=300, y=55)
+
+    Label(business_info_frame, text="Licence No:", bg='white', font=label_font).place(x=580, y=55)
+    license_entry = Entry(business_info_frame, width=12, font=entry_font)
+    license_entry.place(x=720, y=55)
+
+    Label(business_info_frame, text="Firm Name:", bg='white', font=label_font).place(x=150, y=110)
+    firm_name_entry = Entry(business_info_frame, width=40, font=entry_font)
+    firm_name_entry.place(x=450, y=110)
+
+    Label(business_info_frame, text="Business Hours:", bg='white', font=label_font).place(x=150, y=160)
+    business_hours_entry = Entry(business_info_frame, width=40, font=entry_font)
+    business_hours_entry.place(x=450, y=160)
+
+    Label(business_info_frame, text="Location:", bg='white', font=label_font).place(x=150, y=210)
+    location_entry = Entry(business_info_frame, width=40, font=entry_font)
+    location_entry.place(x=450, y=210)
+
+    Label(business_info_frame, text="Contact:", bg='white', font=label_font).place(x=150, y=260)
+    Label(business_info_frame, text="+6", bg='white', font=label_font).place(x=445, y=260)
+    contact_entry = Entry(business_info_frame, width=35, font=entry_font)
+    contact_entry.place(x=480, y=260)
+
+    Label(business_info_frame, text="Email Address:", bg='white', font=label_font).place(x=150, y=310)
+    email_entry = Entry(business_info_frame, width=40, font=entry_font)
+    email_entry.place(x=450, y=310)
+
+    # Bind the tab change event
+    notebook.bind("<<NotebookTabChanged>>", fetch_business_info)
+
+    def toggle_business_info_editability():
+        # Check the current state of the business hour entry
+        current_state = business_hours_entry['state']
+
+        # Determine the new state
+        new_state = 'normal' if current_state == 'readonly' else 'readonly'
+
+        # Set the state for the relevant entries
+        business_hours_entry.config(state=new_state)
+        location_entry.config(state=new_state)
+        contact_entry.config(state=new_state)
+        email_entry.config(state=new_state)
+
+        Label(business_info_frame, text="* * *  Only Certain Data Can Be Edit  * * *", bg='white',
+              font=('Arial', 14, 'bold'), fg='blue').place(x=400, y=15)
+
+        edit_business_info_button.place_forget()
+
+        # save function, save changes in database
+        save_business_info_button = Button(business_info_frame, text="Save Changes", width=20, font=label_font,
+                                           bg="#002400", fg="white",
+                                           command=lambda: [
+                                               cursor.execute("""UPDATE business_information 
+                                                             SET business_hours = ?, location = ?, 
+                                                                 contact_no = ?, email_address = ?
+                                                             WHERE business_id = ?""",
+                                                              (business_hours_entry.get(), location_entry.get(),
+                                                               contact_entry.get(), email_entry.get(),
+                                                               business_id_entry.get())),
+                                               conn.commit(),
+                                               business_hours_entry.config(state='readonly'),
+                                               location_entry.config(state='readonly'),
+                                               contact_entry.config(state='readonly'),
+                                               email_entry.config(state='readonly'),
+                                               save_business_info_button.place_forget(),
+                                               cancel_button.place_forget(),
+                                               edit_business_info_button.place(x=450, y=400),
+                                               messagebox.showinfo("Success",
+                                                                   "Business information updated successfully!")
+                                           ])
+        save_business_info_button.place(x=310, y=400)
+
+        # reset the changes with database original records
+        cancel_button = Button(business_info_frame, text="Cancel", width=20, font=label_font, bg="red", fg="white",
+                               command=lambda: [
+                                   messagebox.showinfo("Attention", "Changes you made will not be saved."),
+                                   fetch_business_info(None),  # Re-fetch data from database
+                                   business_hours_entry.config(state='readonly'),
+                                   location_entry.config(state='readonly'),
+                                   contact_entry.config(state='readonly'),
+                                   email_entry.config(state='readonly'),
+                                   save_business_info_button.place_forget(),
+                                   cancel_button.place_forget(),
+                                   edit_business_info_button.place(x=450, y=400)
+                               ])
+        cancel_button.place(x=610, y=400)
+
+    edit_business_info_button = Button(business_info_frame, text="Edit Business Info", width=20, font=label_font,
+                                       bg="#fd5602", fg="white", command=toggle_business_info_editability)
+    edit_business_info_button.place(x=450, y=400)
+
+    # Configure the tab size and style
+    notebook.tab(0, padding=[10, 10])  # Add padding to the first tab
+    notebook.tab(1, padding=[10, 10])  # Add padding to the second tab
+
+    # Configure tab size
+    style = ttk.Style()
+    style.configure('TNotebook', tabposition='n')  # 'n' for top position
+    style.configure('TNotebook.Tab', padding=[30, 10], font=('Arial', 18, 'italic', 'bold'),
+                    justify='left')  # Increased padding for longer tabs
+    style.configure('TNotebook.Tab', anchor='w')  # 'w' stands for west (left)
+    style.configure('TNotebook.Tab', width=150)  # Fixed width for the tab labels
+
+    # Add these lines to configure the selected tab color
+    style.map('TNotebook.Tab', foreground=[("selected", "gold4")])
+
+
+main_frame = Frame(root)
+main_frame.pack(side=RIGHT)
+main_frame.pack_propagate(False)
+main_frame.configure(height=1080, width=1920)
+
+live_location()
+root.mainloop()
+
